@@ -15,7 +15,13 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, render_template, request
+import sys as _sys, os as _os
+# Ensure the directory containing this file is importable
+_this_dir = _os.path.dirname(_os.path.abspath(__file__))
+if _this_dir not in _sys.path:
+    _sys.path.insert(0, _this_dir)
 from auth_routes import register_routes
+from db_init import init_db
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -1737,7 +1743,10 @@ def api_barcode():
     })
 
 
-# Register auth, watchlist, and deal history routes
+# Ensure DB tables exist
+init_db()
+
+# Register all routes — must happen before gunicorn imports
 register_routes(app, _do_search)
 
 if __name__ == "__main__":
