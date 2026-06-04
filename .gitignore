@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+*.db
+uploads/*
+!uploads/.gitkeep
+*.log
+.DS_Store
+.env
+firebase-key.json
+*.swp
+*.swo
+*~
