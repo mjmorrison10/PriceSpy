@@ -69,7 +69,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <button class="pil" data-pg="lot">🧮</button>
 <button class="pil" data-pg="deals">📋</button>
 <button class="pil" data-pg="trending">📊</button>
-<button class="pil" id="navAuth">👤</button>
+<button class="pil" id="navBulk">📥</button><button class="pil" id="navDash">📈</button><button class="pil" id="navHot">🔥</button><button class="pil" id="navROI">💵</button><button class="pil" id="navAuth">👤</button>
 <button class="pil" id="navTheme">🌙</button>
 </div>
 </header>
@@ -112,6 +112,27 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 
 <!-- DEALS -->
 <div class="pg" id="pg-deals"><div class="cd"><h2>📋 Deal History</h2><div id="dh"></div></div></div>
+
+<!-- BULK IMPORT -->
+<div class="pg" id="pg-bulk"><div class="cd"><h2>📥 Bulk Price Check</h2><div class="sb">Paste items or upload CSV. Get instant pricing on everything.</div>
+<textarea id="bulkText" placeholder="Paste items (one per line):&#13;&#10;Nintendo Switch OLED, $100&#13;&#10;iPhone 13 Pro, $250&#13;&#10;Nike Dunk Low, $45" style="width:100%;height:160px;padding:12px;background:var(--bg);border:1.5px solid var(--b);border-radius:var(--rs);color:var(--t);font-size:.85rem;resize:vertical;font-family:inherit;outline:none;"></textarea>
+<div class="rw mt1"><select id="bulkPlat" style="width:120px"><option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="facebook">FB</option><option value="local">Local</option></select><button class="bt bt-p" id="bulkGo">⚡ Price All</button></div>
+<div id="bulkRes" class="mt1"></div></div></div>
+
+<!-- DASHBOARD -->
+<div class="pg" id="pg-dash"><div class="cd"><h2>📈 Flipping Dashboard</h2><button class="bt bt-p mb1" id="dashRef">🔄 Refresh</button><div class="gd" id="dashStats"></div><div id="dashCats"></div></div></div>
+
+<!-- WHAT'S HOT -->
+<div class="pg" id="pg-hot"><div class="cd"><h2>🔥 What's Hot Right Now</h2><div class="sb">Real-time trending items with market data.</div><div id="hotFeed"></div></div></div>
+
+<!-- TRUE ROI -->
+<div class="pg" id="pg-roi"><div class="cd"><h2>💵 True ROI Calculator</h2><div class="sb">Factor in gas, storage, time, and taxes for real profit.</div>
+<div class="rw mb1"><input type="number" id="roiBuy" placeholder="Buy price" step="0.01" style="flex:1"><input type="number" id="roiSell" placeholder="Sell price" step="0.01" style="flex:1"></div>
+<div class="rw mb1"><select id="roiPlat" style="flex:1"><option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="local">Local</option></select><input type="number" id="roiShip" placeholder="Ship material" step="0.01" style="flex:1"></div>
+<div class="rw mb1"><input type="number" id="roiGas" placeholder="Gas cost" step="0.01" style="flex:1"><input type="number" id="roiStorage" placeholder="Storage $" step="0.01" style="flex:1"></div>
+<div class="rw mb1"><input type="number" id="roiHrs" placeholder="Hours spent" step="0.01" style="flex:1"><input type="number" id="roiRate" placeholder="Hourly rate" value="35" step="0.01" style="flex:1"></div>
+<div class="rw mb1"><input type="number" id="roiTax" placeholder="Tax rate %" value="25" step="0.01" style="flex:1"><button class="bt bt-p" id="roiCalc" style="flex:1">Calculate True Profit</button></div>
+<div id="roiRes" class="mt1"></div></div></div>
 
 <!-- TRENDING -->
 <div class="pg" id="pg-trending"><div class="cd"><h2>📊 Trending</h2><div class="sb">Anonymous. What other flippers are watching.</div><div id="tr"></div></div></div>
@@ -243,7 +264,7 @@ D('asub').onclick = async function() {
 };
 
 // Navigation
-var PAGES = ['search','quick','watch','inventory','lot','deals','trending'];
+var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi'];
 function showPage(p) {
   for (var i = 0; i < PAGES.length; i++) {
     var pg = D('pg-' + PAGES[i]);
@@ -256,7 +277,7 @@ function showPage(p) {
   if (p === 'watch') loadWl();
   if (p === 'inventory') loadInv();
   if (p === 'deals') loadDh();
-  if (p === 'trending') loadTr();
+  if (p === 'trending') loadTr(); if (p === 'dash') loadDash(); if (p === 'hot') loadHot(); if (p === 'bulk') D('bulkRes').innerHTML = '';
 }
 var navEls = document.querySelectorAll('[data-pg]');
 for (var i = 0; i < navEls.length; i++) {
@@ -801,6 +822,143 @@ async function loadTr() {
     }
   } catch(e) { D('tr').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
+
+
+// ═══ BULK IMPORT ═══
+D('bulkGo').onclick = async function() {
+  var txt = D('bulkText').value.trim();
+  if (!txt) return;
+  var lines = txt.split('\n');
+  var items = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var parts = line.split(',');
+    var name = parts[0].trim();
+    var price = 0;
+    if (parts[1]) { var pm = parts[1].trim().replace('$','').replace(' ',''); price = parseFloat(pm) || 0; }
+    if (name && price > 0) items.push({name:name, price:price});
+  }
+  if (!items.length) { D('bulkRes').innerHTML = '<div class="er on">No valid items found. Use format: Item Name, $Price</div>'; return; }
+  D('bulkGo').textContent = 'Processing ' + items.length + ' items...';
+  var pl = D('bulkPlat').value || 'ebay';
+  try {
+    var r = await fetch('/api/bulk-price', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:items, platform:pl})});
+    var d = await r.json();
+    var h = '<div class="gd" style="margin-top:12px"><div class="sc"><div class="lb">Total Cost</div><div class="vl">$' + FMT(d.total_cost) + '</div></div><div class="sc"><div class="lb">Total Profit</div><div class="vl ' + (d.total_profit >= 0 ? 'g' : 'r') + '">' + (d.total_profit >= 0 ? '+' : '') + '$' + FMT(d.total_profit) + '</div></div><div class="sc"><div class="lb">Items</div><div class="vl">' + d.total_items + '</div></div></div>';
+    if (d.results) {
+      h += '<div style="margin-top:10px">';
+      for (var i = 0; i < d.results.length; i++) {
+        var it = d.results[i];
+        h += '<div class="lr"><span class="it" style="font-weight:600">' + it.name + '</span><span class="ip">$' + FMT(it.cost) + ' → $' + FMT(it.market_median) + '</span><span style="color:' + (it.net_profit >= 0 ? 'var(--g)' : 'var(--r)') + ';font-weight:700">' + (it.net_profit >= 0 ? '+' : '') + '$' + FMT(it.net_profit) + '</span><span style="font-size:.7rem">' + (it.verdict === 'BUY' ? '🔥' : '🚫') + '</span></div>';
+      }
+      h += '</div>';
+    }
+    D('bulkRes').innerHTML = h;
+  } catch(e) { D('bulkRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
+  D('bulkGo').textContent = '⚡ Price All';
+};
+
+// ═══ DASHBOARD ═══
+async function loadDash() {
+  if (!token) { D('dashStats').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
+  try {
+    var r = await fetch('/api/dashboard?token=' + token);
+    var d = await r.json();
+    D('dashStats').innerHTML = '<div class="sc"><div class="lb">Total Deals</div><div class="vl">' + d.total_deals + '</div><div class="sm">$' + FMT(d.total_invested) + ' invested</div></div><div class="sc"><div class="lb">Net Profit</div><div class="vl ' + (d.total_net_profit >= 0 ? 'g' : 'r') + '">' + (d.total_net_profit >= 0 ? '+' : '') + '$' + FMT(d.total_net_profit) + '</div><div class="sm">' + d.total_roi + '% ROI</div></div><div class="sc"><div class="lb">Avg Score</div><div class="vl">' + FMT(d.avg_flip_score) + '/100</div></div><div class="sc"><div class="lb">Inventory</div><div class="vl">' + (d.inventory.total_items || 0) + '</div><div class="sm">$' + FMT(d.inventory.sold_profit || 0) + ' sold profit</div></div>';
+    if (d.categories && Object.keys(d.categories).length) {
+      D('dashCats').innerHTML = '<h3 style="margin-top:14px">📂 By Category</h3><div class="gd">' + Object.keys(d.categories).map(function(c) { return '<div class="sc"><div class="lb">' + c + '</div><div class="vl">' + d.categories[c] + '</div></div>'; }).join('') + '</div>';
+    }
+  } catch(e) { D('dashStats').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
+}
+D('dashRef').onclick = loadDash;
+
+// ═══ WHAT'S HOT ═══
+async function loadHot() {
+  try {
+    var items = await fetch('/api/whats-hot').then(function(r) { return r.json(); });
+    if (!items || !items.length) { D('hotFeed').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No hot items yet.</div>'; return; }
+    D('hotFeed').innerHTML = items.map(function(it) {
+      var vIcon = it.volume_trend === 'accelerating' ? '📈' : (it.volume_trend === 'slowing' ? '📉' : '→');
+      return '<div class="lr" style="cursor:pointer" onclick="D('q').value='' + it.query + '';showPage('search');search()"><span style="font-size:1.2rem">🔥</span><span class="it" style="font-weight:600">' + it.query + '</span><span class="ip">$' + FMT(it.market_median) + '</span><span style="font-size:.7rem;color:var(--t2)">' + vIcon + ' ' + it.watchers + ' watching</span><span style="color:' + (it.flip_score >= 70 ? 'var(--g)' : (it.flip_score >= 50 ? 'var(--am)' : 'var(--r)')) + ';font-weight:700;font-size:.8rem">' + it.flip_score + '/100</span></div>';
+    }).join('');
+  } catch(e) { D('hotFeed').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
+}
+
+// ═══ TRUE ROI ═══
+D('roiCalc').onclick = async function() {
+  var b = {
+    buy_price: parseFloat(D('roiBuy').value) || 0,
+    sell_price: parseFloat(D('roiSell').value) || 0,
+    platform: D('roiPlat').value,
+    shipping_materials: parseFloat(D('roiShip').value) || 0,
+    gas: parseFloat(D('roiGas').value) || 0,
+    storage: parseFloat(D('roiStorage').value) || 0,
+    hours_spent: parseFloat(D('roiHrs').value) || 0,
+    hourly_rate: parseFloat(D('roiRate').value) || 35,
+    tax_rate: parseFloat(D('roiTax').value) || 25
+  };
+  if (!b.buy_price || !b.sell_price) return;
+  try {
+    var r = await fetch('/api/true-roi', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
+    var d = await r.json();
+    D('roiRes').innerHTML = '<div class="cd" style="margin-top:12px"><h3>' + (d.final_net >= 0 ? '✅ ' + d.verdict : '❌ ' + d.verdict) + '</h3><div class="gd"><div class="sc"><div class="lb">Net After Fees</div><div class="vl ' + (d.net_after_fees >= 0 ? 'g' : 'r') + '">' + (d.net_after_fees >= 0 ? '+' : '') + '$' + FMT(d.net_after_fees) + '</div></div><div class="sc"><div class="lb">Hidden Costs</div><div class="vl r">-$' + FMT(d.hidden_costs) + '</div><div class="sm">Gas/Storage/Time</div></div><div class="sc"><div class="lb">Taxes</div><div class="vl r">-$' + FMT(d.tax_amount) + '</div></div><div class="sc"><div class="lb">TRUE NET</div><div class="vl ' + (d.final_net >= 0 ? 'g' : 'r') + '" style="font-size:1.5rem">' + (d.final_net >= 0 ? '+' : '') + '$' + FMT(d.final_net) + '</div><div class="sm">' + d.final_margin + '% real margin</div></div></div></div>';
+  } catch(e) { D('roiRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
+};
+
+// ═══ COMPETITOR LANDSCAPE + PLATFORM OPT + SHARE buttons on search =======
+// Add after renderAll completes: competitor info
+async function loadCompetitor(q) {
+  if (!q) return;
+  try {
+    var r = await fetch('/api/competitor-landscape?q=' + encodeURIComponent(q));
+    var d = await r.json();
+    if (d.error) return;
+    var cont = D('competitorCard');
+    if (!cont) return;
+    cont.style.display = '';
+    cont.innerHTML = '<h3>🏪 Competitor Landscape</h3><div class="gd" style="margin-top:8px"><div class="sc"><div class="lb">Active Sellers</div><div class="vl">' + d.total_active + '</div></div><div class="sc"><div class="lb">Recent Sales</div><div class="vl">' + d.total_sold + '</div></div><div class="sc"><div class="lb">Avg Days to Sell</div><div class="vl">' + FMT(d.avg_days_to_sell) + 'd</div></div></div>';
+    if (d.lowest_3 && d.lowest_3.length) {
+      cont.innerHTML += '<div style="font-size:.75rem;color:var(--t2);margin-top:6px">⬇ Lowest: ' + d.lowest_3.map(function(l){ return '$' + FMT(l.price); }).join(', ') + '</div>';
+    }
+  } catch(e) {}
+}
+
+// Add competitor card after flip card
+var orig_buildListings = buildListings;
+buildListings = function(res, d) {
+  // Add competitor card
+  var compCard = EL('div', 'cd', res);
+  compCard.id = 'competitorCard';
+  loadCompetitor(d.query);
+  // Add platform optimizer
+  if (d.flip_analysis && d.flip_analysis.user_buy_price_used) {
+    var optCard = EL('div', 'cd', res);
+    optCard.innerHTML = '<h3>📱 Platform Comparison</h3><div class="sb">Where to list for max profit</div>';
+    (async function() {
+      try {
+        var r = await fetch('/api/platform-optimize?q=' + encodeURIComponent(d.query) + '&buy_price=' + (d.flip_analysis.potential_buy_price || 0));
+        var pd = await r.json();
+        if (pd.platforms) {
+          optCard.innerHTML += '<div class="gd">' + pd.platforms.map(function(p){ return '<div class="sc"><div class="lb">' + p.platform + (p.recommended?' ⭐':'') + '</div><div class="vl ' + (p.net_profit >= 0 ? 'g' : 'r') + '" style="font-size:1rem">' + (p.net_profit >= 0 ? '+' : '') + '$' + FMT(p.net_profit) + '</div><div class="sm">~' + FMT(p.days_to_sell) + 'd to sell</div></div>'; }).join('') + '</div>';
+        }
+      } catch(e) {}
+    })();
+  }
+  // Add share button
+  var shareBtn = EL('button', 'bt bt-p', res);
+  shareBtn.style.cssText = 'margin-bottom:14px';
+  shareBtn.textContent = '🔗 Share This Deal';
+  shareBtn.onclick = async function() {
+    try {
+      var r = await fetch('/api/share-deal', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:d.query, condition:d.active_filter_condition||'all', buy_price:d.flip_analysis.potential_buy_price||0})});
+      var sd = await r.json();
+      alert('Share URL: ' + sd.share_url + '\n\n' + sd.summary.query + '\nMedian: $' + FMT(sd.summary.median) + ' | ' + sd.summary.verdict + ' (' + sd.summary.flip_score + '/100)');
+    } catch(e) {}
+  };
+  // Original listings
+  orig_buildListings(res, d);
+};
 
 // INIT
 console.log('PriceSpy v14 ready — pure DOM, no Jinja2, no paren bugs');

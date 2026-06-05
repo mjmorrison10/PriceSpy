@@ -275,4 +275,156 @@ def register_routes(app, do_search_fn):
                        "price_advice":pa,"condition_gaps":r.get("opportunity",{}).get("condition_gaps",[]),
                        "active_to_sold_ratio":round(ats,1)})
 
-print("auth_routes.py loaded successfully")
+
+    # ═══ BULK PRICE (Change 1) ═══
+    @app.route("/api/bulk-price", methods=["POST"])
+    def bulk_price():
+        d = request.get_json(force=True,silent=True) or {}
+        items = d.get("items",[])
+        platform = d.get("platform","ebay")
+        try: shipping = float(d.get("shipping_per_item","0") or 0)
+        except: shipping = 0.0
+        if not items: return jsonify({"error":"No items"}),400
+        results = []; total_cost = 0; total_profit = 0
+        for item in items[:50]:
+            name = (item.get("name") or "").strip()
+            price = float(item.get("price",0) or 0)
+            if not name or price <= 0: continue
+            total_cost += price
+            try:
+                r = do_search_fn(name,180,"6m","all",price,platform,shipping)
+                fc = r.get("flip_analysis",{}).get("fee_calculation",{})
+                net = fc.get("net_profit",0); total_profit += net
+                results.append({"name":name,"cost":price,"market_median":r["sold_summary"]["median"],"net_profit":net,"flip_score":r["flip_analysis"]["score"],"verdict":"BUY" if net>0 else "LEAVE"})
+            except Exception: results.append({"name":name,"cost":price,"error":"failed"})
+        return jsonify({"results":results,"total_cost":round(total_cost,2),"total_profit":round(total_profit,2),"total_items":len(results)})
+
+    # ═══ COMPETITOR LANDSCAPE (Change 3) ═══
+    @app.route("/api/competitor-landscape")
+    def competitor_landscape():
+        q = request.args.get("q","").strip()
+        if not q: return jsonify({"error":"Query required"}),400
+        try: r = do_search_fn(q,180,"6m","all",0,"ebay",0)
+        except: return jsonify({"error":"Search failed"}),500
+        active = r.get("active_listings",[]); sold = r.get("recent_sold",[])
+        cond_prices = {}
+        for it in active:
+            c = it.get("condition","unknown"); p = it.get("price",0)
+            if c not in cond_prices: cond_prices[c] = []
+            if p > 0: cond_prices[c].append(p)
+        cond_summary = {}
+        for c, prices in cond_prices.items():
+            if not prices: continue
+            prices.sort()
+            cond_summary[c] = {"count":len(prices),"median":round(prices[len(prices)//2],2),"low":round(prices[0],2),"high":round(prices[-1],2)}
+        sp = sorted(active, key=lambda x: x.get("price",0))
+        low3 = [{"title":it["title"][:60],"price":it["price"]} for it in sp[:3]]
+        hi3 = [{"title":it["title"][:60],"price":it["price"]} for it in sp[-3:]]
+        days = r["flip_analysis"].get("liquidity",{}).get("avg_days_to_sell",30) if "liquidity" in r.get("flip_analysis",{}) else 30
+        return jsonify({"query":q,"total_active":len(active),"total_sold":len(sold),"condition_summary":cond_summary,"lowest_3":low3,"highest_3":hi3,"avg_days_to_sell":round(days,1)})
+
+    # ═══ TRUE ROI (Change 4) ═══
+    @app.route("/api/true-roi", methods=["POST"])
+    def true_roi():
+        d = request.get_json(force=True,silent=True) or {}
+        buy = float(d.get("buy_price",0) or 0); sell = float(d.get("sell_price",0) or 0)
+        pl = d.get("platform","ebay"); gas = float(d.get("gas",0) or 0)
+        storage = float(d.get("storage",0) or 0); hrs = float(d.get("hours_spent",0) or 0)
+        rate = float(d.get("hourly_rate",35) or 35); mats = float(d.get("shipping_materials",0) or 0)
+        tax = float(d.get("tax_rate",25) or 25)
+        if not buy or not sell: return jsonify({"error":"Buy and sell price required"}),400
+        fc = _calculate_net_profit(sell,buy,pl,mats)
+        net = fc["net_profit"]
+        hidden = gas + storage + (hrs * rate)
+        true_net = net - hidden
+        tax_amt = max(0, true_net * (tax/100))
+        final = true_net - tax_amt
+        mgn = (final/buy*100) if buy>0 else 0
+        return jsonify({"buy_price":round(buy,2),"sell_price":round(sell,2),"platform_fees":fc["total_fees"],"net_after_fees":round(net,2),"hidden_costs":round(hidden,2),"true_net":round(true_net,2),"tax_amount":round(tax_amt,2),"final_net":round(final,2),"final_margin":round(mgn,1),"verdict":"Profitable" if final>0 else "Losing money"})
+
+    # ═══ DASHBOARD (Change 6) ═══
+    @app.route("/api/dashboard")
+    @require_auth
+    def dashboard():
+        sp = _get_provider()
+        deals = sp.get_deal_history(g.user_id)
+        inv_s = sp.get_inventory_stats(g.user_id)
+        td = len(deals)
+        bd = [d for d in deals if d.get("verdict")=="BUY"]
+        tb = sum(d.get("your_price",0) or 0 for d in bd)
+        tn = sum(d.get("net_profit",0) or 0 for d in deals)
+        avg = sum(d.get("flip_score",0) or 0 for d in deals)/max(td,1)
+        cats = {}
+        for d in deals:
+            n = d.get("item_name","").lower()
+            if any(k in n for k in ["nintendo","playstation","xbox"]): c = "Gaming"
+            elif any(k in n for k in ["iphone","samsung","phone"]): c = "Phones"
+            elif any(k in n for k in ["nike","jordan","sneaker"]): c = "Sneakers"
+            elif any(k in n for k in ["car","toyota","ford","honda"]): c = "Vehicles"
+            else: c = "General"
+            cats[c] = cats.get(c,0)+1
+        return jsonify({"total_deals":td,"total_invested":round(tb,2),"total_net_profit":round(tn,2),"total_roi":round((tn/tb*100),1) if tb>0 else 0,"avg_flip_score":round(avg,1),"inventory":inv_s,"categories":cats})
+
+    # ═══ PLATFORM OPTIMIZER (Change 7) ═══
+    @app.route("/api/platform-optimize")
+    def platform_optimize():
+        q = request.args.get("q","").strip()
+        bp = float(request.args.get("buy_price","0") or 0)
+        if not q: return jsonify({"error":"Query required"}),400
+        platforms = ["ebay","mercari","poshmark","facebook","local"]
+        results = []
+        for pl in platforms:
+            try:
+                r = do_search_fn(q,180,"6m","all",bp,pl,0)
+                fc = r["flip_analysis"]["fee_calculation"]
+                liq = r["flip_analysis"].get("liquidity",{})
+                results.append({"platform":PLATFORM_FEES[pl]["name"],"platform_key":pl,"sell_price":fc["sell_price"],"net_profit":fc["net_profit"],"net_margin":fc["net_margin_pct"],"days_to_sell":round(liq.get("avg_days_to_sell",30),1),"recommended":False})
+            except: pass
+        results.sort(key=lambda x: x["net_profit"], reverse=True)
+        if results: results[0]["recommended"] = True
+        return jsonify({"query":q,"buy_price":bp,"platforms":results})
+
+    # ═══ WHAT'S HOT (Change 8) ═══
+    @app.route("/api/whats-hot")
+    def whats_hot():
+        sp = _get_provider()
+        trending = sp.get_trending_searches(30)
+        hot = []
+        for it in trending:
+            if it.get("count",0) < 3: continue
+            try:
+                r = do_search_fn(it["query"],180,"1m","all",0,"ebay",0)
+                vt = r["flip_analysis"]["liquidity"]["volume_trend"] if "liquidity" in r.get("flip_analysis",{}) else "stable"
+                hot.append({"query":it["query"],"watchers":it.get("count",0),"market_median":r["sold_summary"]["median"],"direction":r["direction"],"volume_trend":vt,"flip_score":r["flip_analysis"]["score"]})
+            except: hot.append({"query":it["query"],"watchers":it.get("count",0),"market_median":0,"direction":"stable","volume_trend":"stable","flip_score":0})
+        return jsonify(hot[:15])
+
+    # ═══ JOURNAL NOTES (Change 9) ═══
+    @app.route("/api/inventory/<item_id>/notes", methods=["PUT"])
+    @require_auth
+    def inventory_notes(item_id):
+        d = request.get_json(force=True,silent=True) or {}
+        _get_provider().update_inventory_item(item_id, g.user_id, {"notes": d.get("notes","")})
+        return jsonify({"ok":True})
+
+    # ═══ SHARE DEAL (Change 10) ═══
+    @app.route("/api/share-deal", methods=["POST"])
+    def share_deal():
+        d = request.get_json(force=True,silent=True) or {}
+        q = d.get("query",""); c = d.get("condition","all")
+        bp = float(d.get("buy_price",0) or 0); pl = d.get("platform","ebay")
+        if not q: return jsonify({"error":"Query required"}),400
+        try: r = do_search_fn(q,180,"6m",c,bp,pl,0)
+        except: return jsonify({"error":"Search failed"}),500
+        sid = secrets.token_hex(8)
+        if not hasattr(app,'shared_deals'): app.shared_deals = {}
+        app.shared_deals[sid] = r
+        return jsonify({"share_id":sid,"share_url":f"/api/shared-deal/{sid}","summary":{"query":q,"median":r["sold_summary"]["median"],"flip_score":r["flip_analysis"]["score"],"verdict":r["flip_analysis"]["verdict"]}})
+
+    @app.route("/api/shared-deal/<sid>")
+    def get_shared_deal(sid):
+        if not hasattr(app,'shared_deals') or sid not in app.shared_deals:
+            return jsonify({"error":"Not found"}),404
+        return jsonify(app.shared_deals[sid])
+
+    print("auth_routes.py loaded successfully")
