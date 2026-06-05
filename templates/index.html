@@ -3,199 +3,88 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PriceSpy — eBay Price History &amp; Market Value</title>
+<title>PriceSpy — eBay Price History & Market Value</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<!-- Firebase SDKs -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <style>
-/* ═══════════════════════════════════════════
-   DARK MODE (default)
-   ═══════════════════════════════════════════ */
-:root,[data-theme="dark"]{
-  --bg:#0f1117; --surface:#1a1d27; --surface2:#22252f;
-  --border:#2a2d38; --text:#e8eaed; --text2:#9aa0a6;
-  --accent:#5b8def; --accent2:#4a7de0;
-  --green:#34d399; --red:#f87171; --amber:#fbbf24; --purple:#a78bfa;
-  --radius:12px; --radius-sm:8px;
-  --holiday-accent:#5b8def;
-  --holiday-surface:#1a1d27;
-  --holiday-glow:none;
-  --chart-bg:var(--surface);
-  --card-shadow:0 4px 24px rgba(0,0,0,.3);
-}
-/* Light mode */
-[data-theme="light"]{
-  --bg:#f5f5f7; --surface:#ffffff; --surface2:#f0f0f3;
-  --border:#dcdce0; --text:#1c1c1e; --text2:#6c6c74;
-  --accent:#2563eb; --accent2:#1d4ed8;
-  --green:#059669; --red:#dc2626; --amber:#d97706; --purple:#7c3aed;
-  --card-shadow:0 2px 12px rgba(0,0,0,.08);
-  --chart-bg:var(--surface);
-}
-
-/* Holiday theme overrides — applied via [data-holiday] */
-[data-holiday="easter"]{
-  --holiday-accent:#c084fc; --holiday-surface:#faf5ff;
-  --holiday-glow:0 0 20px rgba(192,132,252,.15);
-  [data-theme="dark"] & { --holiday-surface:#1a1225; --holiday-glow:0 0 20px rgba(192,132,252,.1); }
-}
-[data-holiday="christmas"]{
-  --holiday-accent:#dc2626; --holiday-surface:#fef2f2;
-  --holiday-glow:0 0 20px rgba(220,38,38,.12);
-  [data-theme="dark"] & { --holiday-surface:#1f1215; }
-}
-[data-holiday="july4"]{
-  --holiday-accent:#ef4444; --holiday-surface:#eff6ff;
-  --holiday-glow:0 0 15px rgba(239,68,68,.1);
-  [data-theme="dark"] & { --holiday-surface:#121a25; }
-}
-[data-holiday="stpatrick"]{
-  --holiday-accent:#16a34a; --holiday-surface:#f0fdf4;
-  [data-theme="dark"] & { --holiday-surface:#121f16; }
-}
-[data-holiday="thanksgiving"]{
-  --holiday-accent:#d97706; --holiday-surface:#fff7ed;
-  [data-theme="dark"] & { --holiday-surface:#1f1810; }
-}
-[data-holiday="valentine"]{
-  --holiday-accent:#ec4899; --holiday-surface:#fdf2f8;
-  [data-theme="dark"] & { --holiday-surface:#1f1218; }
-}
-[data-holiday="halloween"]{
-  --holiday-accent:#f97316; --holiday-surface:#fff7ed;
-  [data-theme="dark"] & { --holiday-surface:#1f1810; }
-}
-[data-holiday="newyear"]{
-  --holiday-accent:#fbbf24; --holiday-surface:#fffbeb;
-  [data-theme="dark"] & { --holiday-surface:#1f1c10; }
-}
-[data-holiday="lent"]{
-  --holiday-accent:#9ca3af; --holiday-surface:#f9fafb;
-  [data-theme="dark"] & { --holiday-surface:#161618; }
-}
-[data-holiday="advent"]{
-  --holiday-accent:#a78bfa; --holiday-surface:#faf5ff;
-  [data-theme="dark"] & { --holiday-surface:#1a1225; }
-}
-[data-holiday="allsaints"]{
-  --holiday-accent:#fbbf24; --holiday-surface:#fffbeb;
-  [data-theme="dark"] & { --holiday-surface:#1f1c10; }
-}
-[data-holiday="ordinary"]{
-  --holiday-accent:#6b7280; --holiday-surface:transparent;
-}
-
-/* ── Base ── */
+:root,[data-theme="dark"]{--bg:#0f1117;--surface:#1a1d27;--surface2:#22252f;--border:#2a2d38;--text:#e8eaed;--text2:#9aa0a6;--accent:#5b8def;--accent2:#4a7de0;--green:#34d399;--red:#f87171;--amber:#fbbf24;--purple:#a78bfa;--radius:12px;--radius-sm:8px}
+[data-theme="light"]{--bg:#f5f5f7;--surface:#fff;--surface2:#f0f0f3;--border:#dcdce0;--text:#1c1c1e;--text2:#6c6c74;--accent:#2563eb;--accent2:#1d4ed8;--green:#059669;--red:#dc2626;--amber:#d97706;--purple:#7c3aed}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5;transition:background .3s,color .3s}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5;transition:background .3s,color .3s}
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
 .logo{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.logo-icon{font-size:1.7rem}
 .header-right{margin-left:auto;display:flex;align-items:center;gap:8px}
 .theme-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .theme-btn:hover{border-color:var(--accent)}
-.holiday-indicator{font-size:.8rem;color:var(--text2);display:flex;align-items:center;gap:4px}
+.header-pill{padding:6px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:18px;color:var(--text2);font-size:.8rem;cursor:pointer;transition:all .15s;white-space:nowrap}
+.header-pill:hover{color:var(--text);border-color:var(--text2)}
+.header-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 main{max-width:1200px;margin:0 auto;padding:32px 24px 80px}
-
-/* ── CATHOLIC DAILY SYMBOL ── */
-.catholic-bar{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 16px;margin-bottom:20px;font-size:.9rem;color:var(--text2);opacity:.7;text-align:center}
-.catholic-symbol{font-size:1.4rem}
-
-/* ── SEARCH ── */
 .search-section{margin-bottom:32px}
-.search-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px 32px;box-shadow:var(--card-shadow)}
+.search-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px 32px;box-shadow:0 4px 24px rgba(0,0,0,.3)}
 .search-card h2{font-size:1.25rem;font-weight:600;margin-bottom:6px}
-.search-card .subtitle{color:var(--text2);font-size:.9rem;margin-bottom:20px}
+.subtitle{color:var(--text2);font-size:.9rem;margin-bottom:12px}
 .search-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
 .search-input-wrap{flex:1;min-width:200px;position:relative}
-.search-input-wrap input{width:100%;padding:14px 48px 14px 18px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:1rem;transition:border-color .2s,box-shadow .2s;outline:none}
+.search-input-wrap input{width:100%;padding:14px 48px 14px 18px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:1rem;transition:border-color .2s;outline:none}
 .search-input-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,141,239,.15)}
 .search-input-wrap input::placeholder{color:#777}
-.search-icon-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--accent);border:none;color:#fff;width:38px;height:38px;border-radius:7px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .2s}
-.search-icon-btn:hover{background:var(--accent2)}
+.search-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--accent);border:none;color:#fff;width:38px;height:38px;border-radius:7px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:background .2s}
+.search-btn:hover{background:var(--accent2)}
 .search-extras{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:12px}
 .extras-label{font-size:.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .cond-select-wrap,.price-input-wrap{display:flex;flex-direction:column}
-.cond-select-wrap select,.price-input-wrap input{padding:8px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.85rem;outline:none;min-width:130px}
-.cond-select-wrap select:focus,.price-input-wrap input:focus{border-color:var(--accent)}
-.cond-select-wrap select option{background:var(--surface);color:var(--text)}
+select,input[type=number]{padding:8px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.85rem;outline:none}
+select:focus,input[type=number]:focus{border-color:var(--accent)}
+select option{background:var(--surface);color:var(--text)}
 .price-input-wrap{position:relative}
 .price-input-wrap .dollar-sign{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:.85rem}
 .price-input-wrap input{padding-left:22px;width:110px}
-.price-input-wrap input::placeholder{color:#777}
-.camera-btn{background:var(--surface2);border:1.5px solid var(--border);color:var(--text);width:48px;height:48px;border-radius:var(--radius-sm);cursor:pointer;font-size:1.3rem;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
-.camera-btn:hover{border-color:var(--accent);background:#282c38}
-#imageInput{display:none}
-
-/* ── STATUS ── */
 .status-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-size:.875rem;color:var(--text2);min-height:24px}
 .spinner{display:none;width:20px;height:20px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 .spinner.show{display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
-.results{display:none}
-.results.show{display:block}
 .error-msg{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:var(--radius-sm);padding:14px 18px;color:var(--red);font-size:.9rem;margin-bottom:16px;display:none}
 .error-msg.show{display:block}
-
-/* ── FILTER BANNER ── */
-.filter-banner{display:none;align-items:center;gap:10px;background:rgba(91,141,239,.1);border:1px solid rgba(91,141,239,.3);border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:16px;font-size:.85rem}
-.filter-banner.show{display:flex}
-.filter-banner .clear-filter{background:var(--accent);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:.75rem;cursor:pointer;font-weight:600}
-
-/* ── SUMMARY CARDS with info icons ── */
+.results{display:none}
+.results.show{display:block}
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--card-shadow);position:relative;transition:border-color .2s}
-.stat-card .label-row{display:flex;align-items:center;gap:6px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
 .stat-card .label{font-size:.75rem;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px}
 .stat-card .value{font-size:1.5rem;font-weight:700}
-.stat-card .value.green{color:var(--green)}
-.stat-card .value.red{color:var(--red)}
-.stat-card .value.amber{color:var(--amber)}
+.stat-card .value.green{color:var(--green)}.stat-card .value.red{color:var(--red)}.stat-card .value.amber{color:var(--amber)}
 .stat-card .sub{font-size:.75rem;color:var(--text2);margin-top:2px}
-.info-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--surface2);color:var(--text2);font-size:.65rem;cursor:help;position:relative;flex-shrink:0;border:1px solid var(--border);transition:all .15s}
-.info-icon:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
-.info-tooltip{display:none;position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);width:260px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:.8rem;line-height:1.5;color:var(--text);z-index:300;box-shadow:0 8px 32px rgba(0,0,0,.4);text-transform:none;letter-spacing:0;font-weight:400;white-space:normal}
-.info-tooltip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--border)}
-.info-icon:hover .info-tooltip,.info-tooltip.show{display:block}
-
-/* ── META ROW ── */
-.meta-row{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
-.direction-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.3px;cursor:help;position:relative}
-.direction-badge.rising{background:rgba(52,211,153,.15);color:var(--green)}
-.direction-badge.falling{background:rgba(248,113,113,.15);color:var(--red)}
-.direction-badge.stable{background:rgba(251,191,36,.15);color:var(--amber)}
-.source-tag{font-size:.75rem;color:var(--text2)}
-.source-tag strong{font-weight:600}
-
-/* ── TIME PILLS ── */
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.chart-card h3{margin-bottom:4px;font-size:1rem}
+.chart-wrap{position:relative;width:100%;height:320px;margin-top:16px}
+.chart-wrap canvas{width:100%!important;height:100%!important}
 .time-pills{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
 .time-pill{padding:6px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:18px;color:var(--text2);font-size:.8rem;cursor:pointer;transition:all .15s;white-space:nowrap}
 .time-pill:hover{color:var(--text);border-color:var(--text2)}
 .time-pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-
-/* ── CHART ── */
-.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px;box-shadow:var(--card-shadow)}
-.chart-card h3{margin-bottom:4px;font-size:1rem}
-.chart-wrap{position:relative;width:100%;height:320px;margin-top:16px}
-.chart-wrap canvas{width:100%!important;height:100%!important}
-
-/* ── CONDITION TABS ── */
-.condition-tabs{display:flex;gap:0;margin-bottom:4px;border-bottom:2px solid var(--border);overflow-x:auto}
-.cond-tab{padding:8px 14px;background:none;border:none;color:var(--text2);font-size:.8rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;white-space:nowrap}
-.cond-tab:hover{color:var(--text)}
-.cond-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.cond-panel{display:none}
-.cond-panel.active{display:block}
-
-/* ── FLIP ANALYSIS ── */
-.flip-card{background:linear-gradient(135deg,var(--surface),var(--surface2));border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px;box-shadow:var(--card-shadow)}
+.direction-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.3px;cursor:help;position:relative}
+.direction-badge.rising{background:rgba(52,211,153,.15);color:var(--green)}
+.direction-badge.falling{background:rgba(248,113,113,.15);color:var(--red)}
+.direction-badge.stable{background:rgba(251,191,36,.15);color:var(--amber)}
+.explain-popup{display:none;position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);width:400px;max-width:90vw;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;font-size:.85rem;line-height:1.6;color:var(--text);z-index:300;box-shadow:0 8px 32px rgba(0,0,0,.5);text-transform:none;letter-spacing:0;font-weight:400}
+.explain-popup.show{display:block}
+.listings-grid{display:grid;gap:8px;margin-bottom:24px}
+.listing-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;display:flex;align-items:center;gap:12px;transition:background .15s;cursor:pointer}
+.listing-row:hover{background:var(--surface2)}
+.listing-row .item-title{flex:1;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.listing-row .item-price{font-weight:700;font-size:1rem;white-space:nowrap}
+.listing-row .item-condition{font-size:.7rem;color:var(--text2);background:var(--surface2);padding:3px 10px;border-radius:12px;white-space:nowrap}
+.listing-row .item-date{font-size:.75rem;color:var(--text2);white-space:nowrap}
+.tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border)}
+.tab-btn{padding:10px 20px;background:none;border:none;color:var(--text2);font-size:.9rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-btn:hover{color:var(--text)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.flip-card{background:linear-gradient(135deg,var(--surface),var(--surface2));border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:24px}
 .flip-header{display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
-.flip-verdict{font-size:1.4rem;font-weight:800}
-.flip-score{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;font-size:1.3rem;font-weight:800;flex-shrink:0}
+.flip-verdict{font-size:1.3rem;font-weight:800}
+.flip-score{display:inline-flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:50%;font-size:1.1rem;font-weight:800;flex-shrink:0}
 .flip-score.great{background:rgba(52,211,153,.15);color:var(--green);border:3px solid var(--green)}
 .flip-score.decent{background:rgba(91,141,239,.15);color:var(--accent);border:3px solid var(--accent)}
 .flip-score.risky{background:rgba(251,191,36,.15);color:var(--amber);border:3px solid var(--amber)}
@@ -206,194 +95,78 @@ main{max-width:1200px;margin:0 auto;padding:32px 24px 80px}
 .flip-metric .fm-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}
 .flip-metric .fm-value{font-size:1.1rem;font-weight:700;margin-top:2px}
 .flip-metric .fm-sub{font-size:.7rem;color:var(--text2)}
-.your-price-badge{display:inline-block;background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:.7rem;font-weight:600}
-
-/* ── EXPLANATION TOOLTIP ── */
-.explain-trigger{cursor:pointer;border-bottom:1px dashed var(--text2);position:relative}
-.explain-popup{display:none;position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);width:400px;max-width:90vw;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;font-size:.85rem;line-height:1.6;color:var(--text);z-index:300;box-shadow:0 8px 32px rgba(0,0,0,.5);text-transform:none;letter-spacing:0;font-weight:400}
-.explain-popup::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:8px solid transparent;border-top-color:var(--border)}
-.explain-popup.show{display:block}
-
-/* ── LISTINGS ── */
-.listings-grid{display:grid;gap:8px;margin-bottom:24px}
-.listing-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;display:flex;align-items:center;gap:12px;transition:background .15s;cursor:pointer}
-.listing-row:hover{background:var(--surface2)}
-.listing-row .item-title{flex:1;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.listing-row .item-price{font-weight:700;font-size:1rem;white-space:nowrap}
-.listing-row .item-condition{font-size:.7rem;color:var(--text2);background:var(--surface2);padding:3px 10px;border-radius:12px;white-space:nowrap}
-.listing-row .item-date{font-size:.75rem;color:var(--text2);white-space:nowrap}
-.listing-row .external-link{color:var(--text2);text-decoration:none;font-size:.85rem;flex-shrink:0}
-.tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border)}
-.tab-btn{padding:10px 20px;background:none;border:none;color:var(--text2);font-size:.9rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
-.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tab-btn:hover{color:var(--text)}
-.tab-panel{display:none}
-.tab-panel.active{display:block}
-
-/* ── BIBLE VERSE FOOTER ── */
-.bible-footer{text-align:center;padding:24px 20px 40px;color:var(--text2);font-size:.85rem;line-height:1.7;border-top:1px solid var(--border);margin-top:32px;opacity:.85}
-.bible-footer .verse-text{font-style:italic;margin-bottom:4px}
-.bible-footer .verse-ref{font-size:.75rem;opacity:.7}
-
-/* ── PHOTO MODAL ── */
-.photo-preview-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-.photo-preview-overlay.show{display:flex}
-.photo-preview-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:500px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.5)}
-.photo-preview-card h3{margin-bottom:8px}
-.photo-preview-card img{width:100%;border-radius:var(--radius-sm);margin-bottom:16px;max-height:300px;object-fit:contain;background:#000}
-.photo-preview-card textarea{width:100%;padding:12px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.95rem;resize:vertical;min-height:60px;font-family:inherit;margin-bottom:12px;outline:none}
-.photo-preview-card textarea:focus{border-color:var(--accent)}
-.photo-preview-actions{display:flex;gap:10px;justify-content:flex-end}
 .btn{padding:10px 20px;border-radius:var(--radius-sm);font-size:.9rem;font-weight:600;cursor:pointer;border:none;transition:all .2s}
 .btn-primary{background:var(--accent);color:#fff}
 .btn-primary:hover{background:var(--accent2)}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)}
 .btn-ghost:hover{background:var(--surface2);color:var(--text)}
 .empty-state{text-align:center;padding:60px 20px;color:var(--text2)}
-.empty-state .empty-icon{font-size:4rem;margin-bottom:16px}
-.empty-state p{font-size:1rem}
+.your-price-badge{display:inline-block;background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:.7rem;font-weight:600}
+.bible-footer{text-align:center;padding:24px 20px 40px;color:var(--text2);font-size:.85rem;line-height:1.7;border-top:1px solid var(--border);margin-top:32px;opacity:.85}
+.bible-footer .verse-text{font-style:italic;margin-bottom:4px}
+.bible-footer .verse-ref{font-size:.75rem;opacity:.7}
 
-@media(max-width:768px){
-  main{padding:16px 12px 60px}
-  .search-card{padding:20px}
-  .search-row{flex-direction:column;align-items:stretch}
-  .search-extras{flex-direction:column}
-  .cond-select-wrap select,.price-input-wrap input{width:100%}
-  .summary-grid{grid-template-columns:1fr 1fr}
-  .flip-metrics{grid-template-columns:1fr 1fr}
-  .listing-row{flex-wrap:wrap;gap:8px}
-  .listing-row .item-title{flex:100%}
-  .time-pills{gap:2px}
-  .time-pill{padding:5px 10px;font-size:.72rem}
-  .chart-wrap{height:250px}
-  .info-tooltip{width:200px;left:0;transform:none}
-}
+@media(max-width:768px){main{padding:16px 12px 60px}.search-card{padding:20px}.summary-grid{grid-template-columns:1fr 1fr}.flip-metrics{grid-template-columns:1fr 1fr}.listing-row{flex-wrap:wrap;gap:8px}.listing-row .item-title{flex:100%}.chart-wrap{height:250px}}
 </style>
 </head>
 <body>
 
 <header>
-  <span class="logo-icon">🔎</span>
+  <span style="font-size:1.7rem">🔎</span>
   <span class="logo">PriceSpy</span>
-  <div style="display:flex;align-items:center;gap:8px;margin-left:16px">
-    <button class="time-pill" id="navSearch" style="border-radius:18px;background:var(--accent);color:#fff;border-color:var(--accent)">🔍 Search</button>
-    <button class="time-pill" id="navWatchlist" style="border-radius:18px">⭐ Watchlist</button>
-    <button class="time-pill" id="navInventory" style="border-radius:18px">📦 Inventory</button>
-    <button class="time-pill" id="navLot" style="border-radius:18px">🧮 Lot Calc</button>
-    <button class="time-pill" id="navTrending" style="border-radius:18px">📊 Trending</button>
-    <button class="time-pill" id="navDeals" style="border-radius:18px">📋 History</button>
-  </div>
   <div class="header-right">
-    <span id="alertBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:2px 8px;font-size:.7rem;font-weight:700;margin-right:4px;cursor:pointer"></span>
-    <span class="holiday-indicator" id="holidayIndicator"></span>
-    <button class="theme-btn" id="themeBtn" title="Toggle light/dark mode">🌙</button>
-    <button class="time-pill" id="authBtn" style="border-radius:18px;font-size:.8rem">👤 Login</button>
-    <span id="userName" style="font-size:.8rem;color:var(--text2);display:none"></span>
+    <button class="header-pill" id="navSearch" style="background:var(--accent);color:#fff;border-color:var(--accent)">🔍 Search</button>
+    <button class="header-pill" id="navWatchlist">⭐ Watchlist</button>
+    <button class="header-pill" id="navDeals">📋 History</button>
+    <button class="theme-btn" id="themeBtn" title="Toggle light/dark">🌙</button>
   </div>
 </header>
 
-<!-- Catholic daily symbol bar -->
-<div class="catholic-bar" id="catholicBar">
-  <span class="catholic-symbol" id="catholicSymbol"></span>
-  <span id="catholicMessage"></span>
-</div>
-
 <main>
-  <section class="search-section">
+  <section class="search-section" id="searchSection">
     <div class="search-card">
       <h2>What's it worth?</h2>
-      <p class="subtitle" id="subtitleText">Search any item for real eBay prices, market trends, conditions, and flipping analysis.</p>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
-        <button class="time-pill active" id="modeFull" style="border-radius:18px">📊 Full Analysis</button>
-        <button class="time-pill" id="modeQuick" style="border-radius:18px">⚡ Quick Deal</button>
-      </div>
+      <p class="subtitle">Search any item for real eBay prices, market trends, and flipping analysis.</p>
       <div class="search-row">
         <div class="search-input-wrap">
-          <input type="text" id="searchInput" placeholder='Try "Nintendo Switch OLED" or "Pokemon Scarlet"...' autocomplete="off">
-          <button class="search-icon-btn" id="searchBtn" title="Search">🔍</button>
+          <input type="text" id="searchInput" placeholder='Try "Nintendo Switch OLED" or "iPhone 15 Pro"...' autocomplete="off">
+          <button class="search-btn" id="searchBtn">🔍</button>
         </div>
-        <button class="camera-btn" id="cameraBtn" title="Identify from photo">📷</button>
-        <input type="file" id="imageInput" accept="image/*" capture="environment">
       </div>
       <div class="search-extras">
         <div class="cond-select-wrap">
           <div class="extras-label">Condition</div>
-          <select id="conditionSelect"></select>
+          <select id="conditionSelect"><option value="all">All Conditions</option></select>
         </div>
         <div class="price-input-wrap">
           <div class="extras-label">Your Buy Price ($)</div>
           <span class="dollar-sign">$</span>
-          <input type="number" id="buyPriceInput" placeholder="50.00" step="0.01" min="0">
+          <input type="number" id="buyPriceInput" placeholder="0" step="0.01" min="0">
         </div>
         <div class="cond-select-wrap">
-          <div class="extras-label">Sell Platform</div>
+          <div class="extras-label">Sell On</div>
           <select id="platformSelect">
-            <option value="ebay">eBay (13.25% + $0.40)</option>
-            <option value="mercari">Mercari (10%)</option>
-            <option value="poshmark">Poshmark (20%)</option>
-            <option value="facebook">FB Marketplace (5%)</option>
-            <option value="local">Local / Cash (0%)</option>
+            <option value="ebay">eBay (13.25%)</option><option value="mercari">Mercari (10%)</option><option value="poshmark">Poshmark (20%)</option><option value="facebook">FB (5%)</option><option value="local">Local (0%)</option>
           </select>
         </div>
         <div class="price-input-wrap">
-          <div class="extras-label">Shipping Cost ($)</div>
+          <div class="extras-label">Shipping ($)</div>
           <span class="dollar-sign">$</span>
-          <input type="number" id="shippingInput" placeholder="0.00" step="0.01" min="0">
+          <input type="number" id="shippingInput" placeholder="0" step="0.01" min="0">
         </div>
-        <button class="btn btn-primary" id="applyFilters" style="align-self:flex-end">Apply</button>
-      </div>
-      <!-- Quick Deal Input (hidden in full mode) -->
-      <div id="quickDealInput" style="display:none;margin-top:14px">
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="text" id="quickDealField" 
-            placeholder='Describe what you found. e.g. "Nikon D850 body, good condition, $400"' 
-            autocomplete="off"
-            style="flex:1;padding:14px 18px;background:var(--bg);border:2px solid var(--accent);border-radius:var(--radius-sm);color:var(--text);font-size:1rem;outline:none">
-          <button class="camera-btn" id="micBtn" title="Speak your item" style="width:48px;height:48px;border-radius:var(--radius-sm);flex-shrink:0">🎤</button>
-          <button class="camera-btn" id="scanBtn" title="Scan barcode" style="width:48px;height:48px;border-radius:var(--radius-sm);flex-shrink:0">📷</button>
-        </div>
-        <div id="voiceStatus" style="font-size:.75rem;color:var(--accent);margin-top:4px;display:none"></div>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <div class="cond-select-wrap">
-            <div class="extras-label">Sell Platform</div>
-            <select id="quickPlatform" style="padding:8px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.85rem">
-              <option value="ebay">eBay (13.25%)</option>
-              <option value="mercari">Mercari (10%)</option>
-              <option value="poshmark">Poshmark (20%)</option>
-              <option value="facebook">FB Marketplace (5%)</option>
-              <option value="local">Local / Cash (0%)</option>
-            </select>
-          </div>
-          <div class="price-input-wrap">
-            <div class="extras-label">Shipping ($)</div>
-            <span class="dollar-sign">$</span>
-            <input type="number" id="quickShipping" placeholder="0" step="0.01" min="0" style="padding:8px 12px 8px 22px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.85rem;width:80px">
-          </div>
-          <button class="btn btn-primary" id="quickDealBtn" style="align-self:flex-end">⚡ Analyze Deal</button>
-        </div>
-        <div style="font-size:.75rem;color:var(--text2);margin-top:6px">
-          Type what you found + the price. We'll auto-detect the item, condition, and tell you to BUY or LEAVE.
-        </div>
+        <button class="btn btn-primary" id="applyFiltersBtn">Search</button>
       </div>
     </div>
   </section>
 
-  <div class="status-bar">
-    <span class="spinner" id="spinner"></span>
-    <span id="statusText"></span>
-  </div>
-
+  <div class="status-bar"><span class="spinner" id="spinner"></span><span id="statusText"></span></div>
   <div class="error-msg" id="errorMsg"></div>
-
-  <div class="filter-banner" id="filterBanner">
-    <span id="filterBannerText"></span>
-    <button class="clear-filter" id="clearFilter">✕ Clear</button>
-  </div>
 
   <div class="results" id="results">
     <div class="summary-grid" id="summaryGrid"></div>
-    <div class="meta-row" id="metaRow"></div>
-    <div class="time-pills" id="timePills">
+    <div id="directionRow" style="margin-bottom:20px"></div>
+    
+    <div class="time-pills">
       <button class="time-pill" data-period="1w">1W</button>
       <button class="time-pill" data-period="1m">1M</button>
       <button class="time-pill" data-period="3m">3M</button>
@@ -410,1912 +183,220 @@ main{max-width:1200px;margin:0 auto;padding:32px 24px 80px}
       <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
     </div>
 
-    <div id="quickDealResult"></div>
-    <div id="timingCard"></div>
-    <div id="intelCard"></div>
-    <div id="saturationContainer"></div>
-    <div id="liquidityContainer"></div>
-
-    <div class="chart-card" id="conditionCard">
-      <h3>🏷️ Price by Condition <span style="font-size:.75rem;color:var(--text2);font-weight:400">(click to filter)</span></h3>
-      <div class="condition-tabs" id="conditionTabs"></div>
-      <div id="conditionPanels"></div>
-    </div>
-
     <div class="flip-card" id="flipCard"></div>
 
     <div class="tabs">
       <button class="tab-btn active" data-tab="sold">🟢 Recently Sold</button>
       <button class="tab-btn" data-tab="active">🔵 Active Listings</button>
     </div>
-    <div class="tab-panel active" id="tab-sold">
-      <div class="listings-grid" id="soldListings"></div>
-    </div>
-    <div class="tab-panel" id="tab-active">
-      <div class="listings-grid" id="activeListings"></div>
-    </div>
+    <div class="tab-panel active" id="tab-sold"><div class="listings-grid" id="soldListings"></div></div>
+    <div class="tab-panel" id="tab-active"><div class="listings-grid" id="activeListings"></div></div>
   </div>
 </main>
 
-<!-- Bible verse footer -->
 <div class="bible-footer" id="bibleFooter">
   <div class="verse-text" id="verseText"></div>
   <div class="verse-ref" id="verseRef"></div>
 </div>
 
-<!-- Barcode scanner overlay -->
-<div class="photo-preview-overlay" id="scanOverlay">
-  <div class="photo-preview-card">
-    <h3>📷 Scan Barcode</h3>
-    <video id="scanVideo" autoplay playsinline style="width:100%;border-radius:var(--radius-sm);background:#000;max-height:300px;object-fit:cover"></video>
-    <div id="scanStatus" style="text-align:center;padding:12px;font-size:.9rem;color:var(--text2)">Point camera at a barcode</div>
-    <div class="photo-preview-actions">
-      <button class="btn btn-ghost" id="scanCancel">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- PHOTO MODAL -->
-<div class="photo-preview-overlay" id="photoOverlay">
-  <div class="photo-preview-card">
-    <h3>📷 What's in this photo?</h3>
-    <img id="photoPreview" src="" alt="Preview">
-    <textarea id="photoDescription" placeholder="Describe the item (e.g. 'Nike Air Force 1 sneakers, white')..."></textarea>
-    <div class="photo-preview-actions">
-      <button class="btn btn-ghost" id="photoCancel">Cancel</button>
-      <button class="btn btn-primary" id="photoSearch">🔍 Search This Item</button>
-    </div>
-  </div>
-</div>
-
-<!-- Barcode scanner overlay -->
-<div class="photo-preview-overlay" id="scanOverlay">
-  <div class="photo-preview-card">
-    <h3>📷 Scan Barcode</h3>
-    <video id="scanVideo" autoplay playsinline style="width:100%;border-radius:var(--radius-sm);background:#000;max-height:300px;object-fit:cover"></video>
-    <div id="scanStatus" style="text-align:center;padding:12px;font-size:.9rem;color:var(--text2)">Point camera at a barcode</div>
-    <div class="photo-preview-actions">
-      <button class="btn btn-ghost" id="scanCancel">Cancel</button>
-    </div>
-  </div>
-</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 
 <script>
 // ═══════════════════════════════════════════
-//  HOLIDAY & LITURGICAL CALENDAR
+//  SAFE DOM HELPER
 // ═══════════════════════════════════════════
+function $(id){return document.getElementById(id)}
 
-// Easter calculation (Western/Gregorian)
-function getEaster(year) {
-  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
-  const d = Math.floor(b / 4), e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4), k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month - 1, day);
-}
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let chartInstance = null;
+let currentData = null;
+let currentPeriod = '6m';
+let authToken = '';
+let currentUser = null;
 
-function getHoliday(date) {
-  const y = date.getFullYear(), m = date.getMonth(), d = date.getDate();
-  const easter = getEaster(y);
-  const easterMs = easter.getTime();
-  const dateMs = new Date(y, m, d).getTime();
-  const diffFromEaster = Math.round((dateMs - easterMs) / 86400000);
-
-  // Lent: Ash Wednesday (46 days before Easter) to Holy Saturday
-  if (diffFromEaster >= -46 && diffFromEaster < 0) return 'lent';
-  // Easter Sunday through Pentecost (50 days)
-  if (diffFromEaster >= 0 && diffFromEaster <= 50) return 'easter';
-  // Advent: 4th Sunday before Christmas through Dec 24
-  const christmas = new Date(y, 11, 25);
-  const advStart = new Date(christmas);
-  advStart.setDate(christmas.getDate() - (christmas.getDay() === 0 ? 28 : 21 + christmas.getDay()));
-  if (date >= advStart && date < christmas) return 'advent';
-  // Christmas season: Dec 25 - Jan 5 (Epiphany)
-  if ((m === 11 && d >= 25) || (m === 0 && d <= 5)) return 'christmas';
-  // New Year: Dec 31 - Jan 1
-  if ((m === 11 && d === 31) || (m === 0 && d === 1)) return 'newyear';
-  // St. Valentine: Feb 14
-  if (m === 1 && d === 14) return 'valentine';
-  // St. Patrick: Mar 17
-  if (m === 2 && d === 17) return 'stpatrick';
-  // Independence Day: Jul 4
-  if (m === 6 && d === 4) return 'july4';
-  // Halloween: Oct 31
-  if (m === 9 && d === 31) return 'halloween';
-  // Thanksgiving: 4th Thursday of November
-  const nov1 = new Date(y, 10, 1);
-  const firstThu = nov1.getDate() + ((4 - nov1.getDay() + 7) % 7);
-  const thanksGiving = new Date(y, 10, firstThu + 21);
-  if (date.toDateString() === thanksGiving.toDateString()) return 'thanksgiving';
-  // All Saints: Nov 1
-  if (m === 10 && d === 1) return 'allsaints';
-  // Ash Wednesday
-  const ashWednesday = new Date(easter);
-  ashWednesday.setDate(easter.getDate() - 46);
-  if (date.toDateString() === ashWednesday.toDateString()) return 'lent';
-
-  return 'ordinary';
-}
-
-function applyHolidayTheme(date) {
-  const holiday = getHoliday(date);
-  document.documentElement.setAttribute('data-holiday', holiday);
-  const labels = {
-    easter:'🐣 Easter Season', christmas:'🎄 Christmas', july4:'🇺🇸 Independence Day',
-    stpatrick:'☘️ St. Patrick', thanksgiving:'🦃 Thanksgiving', valentine:'💝 St. Valentine',
-    halloween:'🎃 Halloween', newyear:'🎆 New Year', lent:'✝️ Lent',
-    advent:'🕯️ Advent', allsaints:'👑 All Saints', ordinary:''
-  };
-  const indicator = document.getElementById('holidayIndicator');
-  if (indicator && labels[holiday]) indicator.textContent = labels[holiday];
+// ═══════════════════════════════════════════
+//  THEME
+// ═══════════════════════════════════════════
+if($('themeBtn')){
+  const saved = localStorage.getItem('pricespy-theme');
+  if(saved==='light'){document.documentElement.setAttribute('data-theme','light');$('themeBtn').textContent='☀️'}
+  $('themeBtn').addEventListener('click',()=>{
+    const n=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';
+    document.documentElement.setAttribute('data-theme',n);
+    $('themeBtn').textContent=n==='light'?'☀️':'🌙';
+    localStorage.setItem('pricespy-theme',n);
+  });
 }
 
 // ═══════════════════════════════════════════
-//  CATHOLIC DAILY SYMBOLS
+//  BIBLE VERSE
 // ═══════════════════════════════════════════
-const CATHOLIC_SYMBOLS = [
-  { symbol:'☧', msg:'Chi Rho — the first two letters of Christ in Greek' },
-  { symbol:'✝', msg:'The Holy Cross — our redemption and hope' },
-  { symbol:'🕊', msg:'The Dove — symbol of the Holy Spirit and peace' },
-  { symbol:'ΑΩ', msg:'Alpha & Omega — the Beginning and the End' },
-  { symbol:'IHS', msg:'IHS — the Holy Name of Jesus' },
-  { symbol:'🐟', msg:'ΙΧΘΥΣ — Jesus Christ, Son of God, Savior' },
-  { symbol:'🙏', msg:'Orans — hands raised in prayer and supplication' },
-  { symbol:'🕯', msg:'The Paschal Candle — light of Christ' },
-  { symbol:'🌿', msg:'The Palm — victory and martyrdom' },
-  { symbol:'👑', msg:'Crown of Thorns — Christ the King' },
-  { symbol:'❤️‍🔥', msg:'Sacred Heart — burning love of Jesus for humanity' },
-  { symbol:'💜', msg:'The Violet — penance and preparation' },
-  { symbol:'🌾', msg:'Wheat & Grapes — the Holy Eucharist' },
-  { symbol:'⚓', msg:'The Anchor — hope and steadfast faith' },
-  { symbol:'🌟', msg:'Star of Bethlehem — the Nativity of Our Lord' },
-  { symbol:'🗝', msg:'Keys of the Kingdom — Saint Peter' },
-  { symbol:'🛡', msg:'Shield of Faith — the armor of God' },
-  { symbol:'🌹', msg:'The Mystical Rose — Blessed Virgin Mary' },
-  { symbol:'🔔', msg:'Sanctus Bells — call to worship' },
-  { symbol:'📖', msg:'Sacred Scripture — the living Word of God' },
-  { symbol:'🕊️🔥', msg:'Tongues of Fire — Pentecost' },
-  { symbol:'👼', msg:'Guardian Angel — protector and guide' },
-  { symbol:'💧', msg:'Baptismal Water — cleansing and rebirth' },
-  { symbol:'🍞', msg:'Bread of Life — Corpus Christi' },
-  { symbol:'🏔', msg:'Mount Tabor — the Transfiguration' },
-  { symbol:'🫒', msg:'Mount of Olives — Christ\'s agony and prayer' },
-  { symbol:'🌅', msg:'Easter Dawn — He is Risen!' },
-  { symbol:'🔗', msg:'Chains of St. Peter — freedom through faith' },
-  { symbol:'🐑', msg:'Agnus Dei — Lamb of God who takes away our sins' },
-  { symbol:'💒', msg:'The Church — mystical body of Christ' },
-  { symbol:'🪔', msg:'Oil of Gladness — anointing of the Holy Spirit' },
-];
-
-function setDailySymbol() {
-  const today = new Date();
-  const idx = (today.getFullYear() * 365 + Math.floor(today.getTime() / 86400000)) % CATHOLIC_SYMBOLS.length;
-  const entry = CATHOLIC_SYMBOLS[idx];
-  document.getElementById('catholicSymbol').textContent = entry.symbol;
-  document.getElementById('catholicMessage').textContent = entry.msg;
-}
+const VERSES=[{t:'"For I know well the plans I have in mind for you, plans for your welfare, not for your disaster, plans to give you a future filled with hope."',r:'Jeremiah 29:11'},{t:'"I can do all things through him who strengthens me."',r:'Philippians 4:13'},{t:'"The Lord is my shepherd; there is nothing I shall lack."',r:'Psalm 23:1'},{t:'"Be strong and courageous. Do not be afraid, for the Lord your God goes with you."',r:'Deuteronomy 31:6'},{t:'"Come to me, all you who labor and are burdened, and I will give you rest."',r:'Matthew 11:28'},{t:'"The Lord is my light and my salvation; whom shall I fear?"',r:'Psalm 27:1'},{t:'"Rejoice in the Lord always. I say it again: rejoice!"',r:'Philippians 4:4'},{t:'"For God so loved the world that he gave his only Son."',r:'John 3:16'},{t:'"Trust in the Lord with all your heart."',r:'Proverbs 3:5'},{t:'"Seek first the kingdom of God and his righteousness."',r:'Matthew 6:33'},{t:'"The steadfast love of the Lord never ceases."',r:'Lamentations 3:22'},{t:'"Behold, I am with you always, even to the end of the age."',r:'Matthew 28:20'},{t:'"We know that all things work together for good for those who love God."',r:'Romans 8:28'},{t:'"Be still and know that I am God."',r:'Psalm 46:11'},{t:'"This is the day that the Lord has made; let us rejoice and be glad in it."',r:'Psalm 118:24'},{t:'"The Lord is near to the brokenhearted."',r:'Psalm 34:18'},{t:'"Do not be anxious about anything."',r:'Philippians 4:6'},{t:'"I am the way, and the truth, and the life."',r:'John 14:6'},{t:'"You shall love the Lord your God with all your heart."',r:'Matthew 22:37'},{t:'"Let your light shine before men."',r:'Matthew 5:16'},{t:'"Blessed are the peacemakers."',r:'Matthew 5:9'},{t:'"For where your treasure is, there also will your heart be."',r:'Matthew 6:21'},{t:'"The Lord bless you and keep you."',r:'Numbers 6:24-25'},{t:'"Let nothing disturb you, let nothing frighten you. All things pass. God never changes."',r:'St. Teresa of Ávila'}];
+function setVerse(){const v=VERSES[new Date().getHours()%VERSES.length];$('verseText').textContent=v.t;$('verseRef').textContent='— '+v.r}
+setVerse();setInterval(setVerse,3600000);
 
 // ═══════════════════════════════════════════
-//  BIBLE VERSES (New Catholic Bible — hourly rotation)
+//  CONDITION OPTIONS
 // ═══════════════════════════════════════════
-const BIBLE_VERSES = [
-  { text:'"For I know well the plans I have in mind for you, plans for your welfare, not for your disaster, plans to give you a future filled with hope."', ref:'Jeremiah 29:11' },
-  { text:'"I can do all things through him who strengthens me."', ref:'Philippians 4:13' },
-  { text:'"The Lord is my shepherd; there is nothing I shall lack."', ref:'Psalm 23:1' },
-  { text:'"Be strong and courageous. Do not be afraid or terrified, for the Lord your God goes with you."', ref:'Deuteronomy 31:6' },
-  { text:'"Come to me, all you who labor and are burdened, and I will give you rest."', ref:'Matthew 11:28' },
-  { text:'"The Lord is my light and my salvation; whom shall I fear?"', ref:'Psalm 27:1' },
-  { text:'"Rejoice in the Lord always. I say it again: rejoice!"', ref:'Philippians 4:4' },
-  { text:'"For God so loved the world that he gave his only Son, so that everyone who believes in him may not perish but may have eternal life."', ref:'John 3:16' },
-  { text:'"Trust in the Lord with all your heart, and do not lean on your own understanding."', ref:'Proverbs 3:5' },
-  { text:'"Seek first the kingdom of God and his righteousness, and all these things will be given to you as well."', ref:'Matthew 6:33' },
-  { text:'"The steadfast love of the Lord never ceases; his mercies never come to an end."', ref:'Lamentations 3:22' },
-  { text:'"Blessed are the peacemakers, for they will be called children of God."', ref:'Matthew 5:9' },
-  { text:'"Behold, I am with you always, even to the end of the age."', ref:'Matthew 28:20' },
-  { text:'"Let your light shine before men, so that they may see your good works and glorify your Father in heaven."', ref:'Matthew 5:16' },
-  { text:'"The Lord bless you and keep you; the Lord make his face shine upon you."', ref:'Numbers 6:24-25' },
-  { text:'"We know that all things work together for good for those who love God."', ref:'Romans 8:28' },
-  { text:'"Be still and know that I am God."', ref:'Psalm 46:11' },
-  { text:'"This is the day that the Lord has made; let us rejoice and be glad in it."', ref:'Psalm 118:24' },
-  { text:'"For where your treasure is, there also will your heart be."', ref:'Matthew 6:21' },
-  { text:'"The Lord is near to the brokenhearted and saves those who are crushed in spirit."', ref:'Psalm 34:18' },
-  { text:'"Do not be anxious about anything, but in everything by prayer and supplication with thanksgiving let your requests be made known to God."', ref:'Philippians 4:6' },
-  { text:'"Let nothing disturb you, let nothing frighten you. All things pass. God never changes."', ref:'St. Teresa of Ávila' },
-  { text:'"I am the way, and the truth, and the life."', ref:'John 14:6' },
-  { text:'"You shall love the Lord your God with all your heart, with all your soul, and with all your mind."', ref:'Matthew 22:37' },
-];
+const COND_OPTIONS=[{v:'all',l:'All Conditions'},{v:'new (sealed)',l:'📦 New Sealed'},{v:'new',l:'🆕 New'},{v:'like new',l:'✨ Like New'},{v:'cib',l:'📋 CIB'},{v:'very good',l:'👍 Very Good'},{v:'good',l:'👌 Good'},{v:'acceptable',l:'⚠️ Acceptable'},{v:'loose',l:'💿 Loose'},{v:'untested',l:'❓ Untested'},{v:'for parts',l:'🔧 For Parts'}];
+$('conditionSelect').innerHTML=COND_OPTIONS.map(c=>`<option value="${c.v}">${c.l}</option>`).join('');
 
-function setBibleVerse() {
-  const hour = new Date().getHours();
-  const idx = hour % BIBLE_VERSES.length;
-  const verse = BIBLE_VERSES[idx];
-  document.getElementById('verseText').textContent = verse.text;
-  document.getElementById('verseRef').textContent = '— ' + verse.ref;
-}
+function condLabel(c){const m={'new (sealed)':'📦 New Sealed','new':'🆕 New','like new':'✨ Like New','cib':'📋 CIB','very good':'👍 Very Good','good':'👌 Good','acceptable':'⚠️ Acceptable','loose':'💿 Loose','untested':'❓ Untested','for parts':'🔧 For Parts','excellent':'⭐ Excellent','fair':'⚠️ Fair','poor':'🔧 Poor'};return m[c]||c||'Unknown'}
+function fmt(n){return(n||0).toFixed?Number(n).toFixed(2):'0.00'}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
 
 // ═══════════════════════════════════════════
-//  LIGHT / DARK MODE
+//  SEARCH
 // ═══════════════════════════════════════════
-function initTheme() {
-  const saved = localStorage.getItem('priceSpy-theme');
-  if (saved === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-    document.getElementById('themeBtn').textContent = '☀️';
-  }
-}
+function setLoading(on){$('spinner').classList.toggle('show',on);$('statusText').textContent=on?'🔎 Searching for real-time pricing data...':''}
+function showError(m){$('errorMsg').textContent=m;$('errorMsg').classList.add('show')}
+function hideError(){$('errorMsg').classList.remove('show')}
 
-document.getElementById('themeBtn').addEventListener('click', () => {
-  const curr = document.documentElement.getAttribute('data-theme');
-  const next = curr === 'light' ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', next);
-  document.getElementById('themeBtn').textContent = next === 'light' ? '☀️' : '🌙';
-  localStorage.setItem('priceSpy-theme', next);
-});
-
-// ═══════════════════════════════════════════
-//  QUICK DEAL MODE
-// ═══════════════════════════════════════════
-
-let quickDealMode = false;
-const modeFullBtn = document.getElementById('modeFull');
-const modeQuickBtn = document.getElementById('modeQuick');
-const quickDealInput = document.getElementById('quickDealInput');
-const quickDealField = document.getElementById('quickDealField');
-const quickDealBtn = document.getElementById('quickDealBtn');
-const quickDealResult = document.getElementById('quickDealResult');
-const quickPlatform = document.getElementById('quickPlatform');
-const quickShipping = document.getElementById('quickShipping');
-const subtitleText = document.getElementById('subtitleText');
-const searchExtras = document.querySelector('.search-extras');
-const mainSearchInput = document.getElementById('searchInput');
-const searchIconBtn = document.getElementById('searchBtn');
-const cameraBtn = document.getElementById('cameraBtn');
-
-modeFullBtn.addEventListener('click', () => setDealMode(false));
-modeQuickBtn.addEventListener('click', () => setDealMode(true));
-
-function setDealMode(quick) {
-  quickDealMode = quick;
-  modeFullBtn.classList.toggle('active', !quick);
-  modeQuickBtn.classList.toggle('active', quick);
-  quickDealInput.style.display = quick ? 'block' : 'none';
-  if (searchExtras) searchExtras.style.display = quick ? 'none' : '';
-  if (mainSearchInput) mainSearchInput.parentElement.style.display = quick ? 'none' : '';
-  if (searchIconBtn) searchIconBtn.style.display = quick ? 'none' : '';
-  if (cameraBtn) cameraBtn.style.display = quick ? 'none' : '';
-  subtitleText.textContent = quick 
-    ? 'Type what you found + price. Get an instant BUY or LEAVE verdict.'
-    : 'Search any item for real eBay prices, market trends, conditions, and flipping analysis.';
-  // Hide full results in quick mode
-  const fullResults = document.getElementById('results');
-  if (fullResults) fullResults.classList.remove('show');
-  quickDealResult.innerHTML = '';
-  document.getElementById('saturationContainer').innerHTML = '';
-  document.getElementById('liquidityContainer').innerHTML = '';
-  if (quick) quickDealField.focus();
-}
-
-quickDealBtn.addEventListener('click', runQuickDeal);
-quickDealField.addEventListener('keydown', e => { if (e.key === 'Enter') runQuickDeal(); });
-
-async function runQuickDeal() {
-  const input = quickDealField.value.trim();
-  if (!input) return;
+async function doSearch(overrideQuery){
+  const q = overrideQuery || $('searchInput').value.trim();
+  if(!q)return;
+  $('searchInput').value = q;
+  setLoading(true);hideError();$('results').classList.remove('show');
   
-  setLoading(true); hideError();
-  document.getElementById('results').classList.remove('show');
-  quickDealResult.innerHTML = '';
-  document.getElementById('saturationContainer').innerHTML = '';
-  document.getElementById('liquidityContainer').innerHTML = '';
+  const cond = $('conditionSelect').value||'all';
+  const bp = parseFloat($('buyPriceInput').value)||0;
+  const plat = $('platformSelect').value||'ebay';
+  const ship = parseFloat($('shippingInput').value)||0;
   
-  try {
-    const platform = quickPlatform.value || 'ebay';
-    const shipping = parseFloat(quickShipping.value) || 0;
-    const url = `/api/quick-deal?input=${encodeURIComponent(input)}&platform=${platform}&shipping=${shipping.toFixed(2)}`;
+  let url = `/api/search?q=${encodeURIComponent(q)}&period=${currentPeriod}&condition=${encodeURIComponent(cond)}`;
+  if(bp>0) url += `&buy_price=${bp.toFixed(2)}`;
+  url += `&platform=${encodeURIComponent(plat)}`;
+  if(ship>0) url += `&shipping=${ship.toFixed(2)}`;
+  
+  try{
     const resp = await fetch(url);
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Deal analysis failed');
-    renderQuickDealResult(data);
-  } catch (err) {
-    showError(err.message || 'Something went wrong.');
-  } finally {
-    setLoading(false);
-  }
-}
-
-function renderQuickDealResult(data) {
-  const isBuy = data.verdict === 'BUY';
-  const isMaybe = data.verdict === 'MAYBE';
-  const bgColor = isBuy ? 'rgba(52,211,153,.08)' : (isMaybe ? 'rgba(251,191,36,.08)' : 'rgba(248,113,113,.08)');
-  const borderColor = isBuy ? 'var(--green)' : (isMaybe ? 'var(--amber)' : 'var(--red)');
-  const textColor = isBuy ? 'var(--green)' : (isMaybe ? 'var(--amber)' : 'var(--red)');
-  
-  quickDealResult.innerHTML = `
-    <div style="background:${bgColor};border:2px solid ${borderColor};border-radius:var(--radius);padding:32px 28px;margin-bottom:24px;text-align:center">
-      <div style="font-size:3rem;margin-bottom:8px">${data.verdict_label}</div>
-      <div style="font-size:1.1rem;color:${textColor};font-weight:700;margin-bottom:16px">${escHtml(data.verdict_reason)}</div>
-      
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;text-align:left;margin-bottom:20px">
-        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px 16px">
-          <div style="font-size:.7rem;text-transform:uppercase;color:var(--text2)">🏷️ Detected</div>
-          <div style="font-weight:700;font-size:1rem">${escHtml(data.item_name)}</div>
-          <div style="font-size:.75rem;color:var(--text2)">${escHtml(data.detected_condition_label)}</div>
-        </div>
-        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px 16px">
-          <div style="font-size:.7rem;text-transform:uppercase;color:var(--text2)">💵 Your Price</div>
-          <div style="font-weight:700;font-size:1.1rem">${data.your_price ? '$' + data.your_price.toFixed(2) : '—'}</div>
-          <div style="font-size:.75rem;color:var(--text2)">Market: ${escHtml(data.market_value_range)}</div>
-        </div>
-        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px 16px">
-          <div style="font-size:.7rem;text-transform:uppercase;color:var(--text2)">💰 Net Profit</div>
-          <div style="font-weight:700;font-size:1.1rem;color:${(data.net_profit||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${data.net_profit_display}</div>
-          <div style="font-size:.75rem;color:var(--text2)">${data.net_margin}% after all fees</div>
-        </div>
-        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px 16px">
-          <div style="font-size:.7rem;text-transform:uppercase;color:var(--text2)">⚡ Sells In</div>
-          <div style="font-weight:700;font-size:1.1rem">~${Math.round(data.days_to_sell)} days</div>
-          <div style="font-size:.75rem;color:var(--text2)">${data.velocity_label} · ${data.competition_label} competition</div>
-        </div>
-        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px 16px">
-          <div style="font-size:.7rem;text-transform:uppercase;color:var(--text2)">📊 Flip Score</div>
-          <div style="font-weight:700;font-size:1.1rem;color:${(data.flip_score||0) >= 70 ? 'var(--green)' : ((data.flip_score||0) >= 50 ? 'var(--amber)' : 'var(--red)')}">${data.flip_score}/100</div>
-          <div style="font-size:.75rem;color:var(--text2)">${data.competition_ratio}x active/sold</div>
-        </div>
-      </div>
-      
-      <button class="btn btn-primary" id="expandFullAnalysis" style="margin-top:8px">📊 View Full Analysis</button>
-    </div>
-  `;
-  
-  // Expand button — loads full analysis
-  document.getElementById('expandFullAnalysis').addEventListener('click', () => {
-    if (data.full_result) {
-      currentData = data.full_result;
-      currentFilterCondition = data.detected_condition || 'all';
-      // Switch to full mode
-      setDealMode(false);
-      // Populate and render
-      renderAll(currentData);
-      document.getElementById('results').classList.add('show');
-      document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
-    }
-  });
-  
-  quickDealResult.scrollIntoView({behavior:'smooth',block:'center'});
-}
-
-// ═══════════════════════════════════════════
-//  VOICE INPUT
-// ═══════════════════════════════════════════
-
-const micBtn = document.getElementById('micBtn');
-const voiceStatus = document.getElementById('voiceStatus');
-let recognition = null;
-
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      transcript += event.results[i][0].transcript;
-    }
-    quickDealField.value = transcript;
-    if (event.results[0].isFinal) {
-      voiceStatus.style.display = 'none';
-      micBtn.textContent = '🎤';
-      micBtn.style.background = '';
-      // Auto-run the deal
-      setTimeout(() => runQuickDeal(), 400);
-    }
-  };
-
-  recognition.onerror = (event) => {
-    voiceStatus.textContent = 'Voice error: ' + event.error;
-    voiceStatus.style.display = 'block';
-    micBtn.textContent = '🎤';
-    micBtn.style.background = '';
-  };
-
-  recognition.onend = () => {
-    voiceStatus.style.display = 'none';
-    micBtn.textContent = '🎤';
-    micBtn.style.background = '';
-  };
-}
-
-micBtn.addEventListener('click', () => {
-  if (!recognition) {
-    voiceStatus.textContent = 'Voice not supported in this browser. Try Chrome on mobile.';
-    voiceStatus.style.display = 'block';
-    setTimeout(() => voiceStatus.style.display = 'none', 3000);
-    return;
-  }
-  if (micBtn.textContent === '🔴') {
-    recognition.stop();
-    return;
-  }
-  try {
-    recognition.start();
-    micBtn.textContent = '🔴';
-    micBtn.style.background = 'rgba(248,113,113,.2)';
-    voiceStatus.textContent = '🎤 Listening... say item name, condition, and price';
-    voiceStatus.style.display = 'block';
-  } catch (e) {
-    voiceStatus.textContent = 'Voice error. Try again.';
-    voiceStatus.style.display = 'block';
-    setTimeout(() => voiceStatus.style.display = 'none', 2000);
-  }
-});
-
-// ═══════════════════════════════════════════
-//  BARCODE SCANNER
-// ═══════════════════════════════════════════
-
-const scanBtn = document.getElementById('scanBtn');
-const scanOverlay = document.getElementById('scanOverlay');
-const scanVideo = document.getElementById('scanVideo');
-const scanStatus = document.getElementById('scanStatus');
-const scanCancel = document.getElementById('scanCancel');
-let scanStream = null;
-let barcodeDetector = null;
-
-// Check for Barcode Detection API
-if ('BarcodeDetector' in window) {
-  barcodeDetector = new BarcodeDetector({
-    formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
-  });
-}
-
-scanBtn.addEventListener('click', async () => {
-  scanOverlay.classList.add('show');
-  scanStatus.textContent = 'Starting camera...';
-  
-  try {
-    scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    scanVideo.srcObject = scanStream;
-    scanStatus.textContent = barcodeDetector 
-      ? 'Point camera at a barcode' 
-      : 'Barcode scanning not available. Use Chrome on Android.';
-    
-    if (barcodeDetector) {
-      detectBarcodeLoop();
-    }
-  } catch (err) {
-    scanStatus.textContent = 'Camera access denied. Check permissions.';
-    console.error('Camera error:', err);
-  }
-});
-
-function detectBarcodeLoop() {
-  if (!scanStream || !barcodeDetector) return;
-  
-  barcodeDetector.detect(scanVideo).then(barcodes => {
-    if (barcodes.length > 0) {
-      const code = barcodes[0].rawValue;
-      scanStatus.textContent = '✅ Barcode found: ' + code + ' — looking up...';
-      stopScan();
-      lookupBarcode(code);
-      return;
-    }
-    if (scanStream) {
-      requestAnimationFrame(detectBarcodeLoop);
-    }
-  }).catch(() => {
-    if (scanStream) requestAnimationFrame(detectBarcodeLoop);
-  });
-}
-
-async function lookupBarcode(code) {
-  try {
-    const resp = await fetch('/api/barcode?code=' + encodeURIComponent(code));
-    const data = await resp.json();
-    if (data.title) {
-      const searchTerm = data.brand ? data.brand + ' ' + data.title : data.title;
-      quickDealField.value = searchTerm;
-      scanStatus.textContent = '✅ Found: ' + searchTerm.substring(0, 50);
-      setTimeout(() => {
-        scanOverlay.classList.remove('show');
-        runQuickDeal();
-      }, 800);
-    } else {
-      quickDealField.value = code;
-      scanStatus.textContent = '⚠️ Product not found. Barcode saved — add price and condition.';
-      setTimeout(() => scanOverlay.classList.remove('show'), 1500);
-    }
-  } catch (err) {
-    quickDealField.value = code;
-    scanStatus.textContent = '⚠️ Lookup failed. Barcode saved — add price and condition.';
-    setTimeout(() => scanOverlay.classList.remove('show'), 1500);
-  }
-}
-
-function stopScan() {
-  if (scanStream) {
-    scanStream.getTracks().forEach(t => t.stop());
-    scanStream = null;
-  }
-}
-
-scanCancel.addEventListener('click', () => {
-  stopScan();
-  scanOverlay.classList.remove('show');
-});
-
-// ═══════════════════════════════════════════
-//  APP LOGIC
-// ═══════════════════════════════════════════
-const $ = id => document.getElementById(id);
-const searchInput = $('searchInput'), searchBtn = $('searchBtn');
-const conditionSelect = $('conditionSelect'), buyPriceInput = $('buyPriceInput');
-const platformSelect = $('platformSelect'), shippingInput = $('shippingInput');
-const applyFiltersBtn = $('applyFilters');
-const cameraBtn = $('cameraBtn'), imageInput = $('imageInput');
-const spinner = $('spinner'), statusText = $('statusText');
-const errorMsg = $('errorMsg'), results = $('results');
-const filterBanner = $('filterBanner'), filterBannerText = $('filterBannerText');
-const clearFilter = $('clearFilter');
-const summaryGrid = $('summaryGrid'), metaRow = $('metaRow');
-const timePills = $('timePills');
-const chartTitle = $('chartTitle');
-const conditionTabs = $('conditionTabs'), conditionPanels = $('conditionPanels');
-const flipCard = $('flipCard');
-const soldListings = $('soldListings'), activeListings = $('activeListings');
-const photoOverlay = $('photoOverlay'), photoPreview = $('photoPreview');
-const photoDescription = $('photoDescription');
-const photoCancel = $('photoCancel'), photoSearchBtn = $('photoSearchBtn');
-
-let chartInstance = null, lastPickedFile = null;
-let currentData = null, currentPeriod = '6m', currentFilterCondition = 'all';
-let currentBuyPrice = 0;
-
-// Condition list is built dynamically from API response
-let ALL_CONDITIONS = [{val:'all', label:'All Conditions'}];
-
-// Condition select is populated dynamically after first search
-
-// ── Info tooltips for stat cards ──
-const STAT_INFO = {
-  median_sold: 'The middle price among recent sold listings. Half sold above, half below. This is the best single number for what an item is truly worth.',
-  sold_range: 'The spread from lowest to highest recent sale. A wider range means condition matters more. The average (mean) smooths out outliers.',
-  current_market: 'The median asking price for active "Buy It Now" listings. If this is higher than sold prices, sellers may be overpricing. If lower, it could be a buyer\'s market.',
-  market_trend: 'Whether prices are going up (📈), down (📉), or holding steady (→) over your selected time period. Rising = good for holding, falling = sell fast.',
-  flip_score: 'A 0-100 composite score evaluating sell-through rate, profit margin, competition, sales velocity, and price volatility. 70+ = 🔥 Great Flip. 50-69 = ✅ Decent. 30-49 = ⚠️ Risky. Under 30 = 🚫 Avoid.',
-  potential_profit: 'Estimated profit if you buy at the low end of the market (or your entered buy price) and sell at the median. Green = profit, red = loss.',
-};
-
-function infoIconHtml(key) {
-  return `<span class="info-icon" data-info-key="${key}">ⓘ<span class="info-tooltip">${STAT_INFO[key]||''}</span></span>`;
-}
-
-function profitColor(val) {
-  if (val == null) return '';
-  return val >= 0 ? 'green' : 'red';
-}
-
-// ── SEARCH ──
-searchBtn.addEventListener('click', () => executeSearch());
-searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') executeSearch(); });
-applyFiltersBtn.addEventListener('click', () => executeSearch());
-
-function buildApiUrl() {
-  const q = searchInput.value.trim();
-  if (!q) return null;
-  currentFilterCondition = conditionSelect.value || 'all';
-  currentBuyPrice = parseFloat(buyPriceInput.value) || 0;
-  const platform = platformSelect.value || 'ebay';
-  const shipping = parseFloat(shippingInput.value) || 0;
-  let url = `/api/search?q=${encodeURIComponent(q)}&period=${currentPeriod}&condition=${encodeURIComponent(currentFilterCondition)}`;
-  if (currentBuyPrice > 0) url += `&buy_price=${currentBuyPrice.toFixed(2)}`;
-  url += `&platform=${encodeURIComponent(platform)}`;
-  if (shipping > 0) url += `&shipping=${shipping.toFixed(2)}`;
-  return url;
-}
-
-async function executeSearch() {
-  const url = buildApiUrl();
-  if (!url) return;
-  setLoading(true); hideError(); results.classList.remove('show');
-  try {
-    const resp = await fetch(url);
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Search failed');
-    if (data.sold_summary.count === 0 && data.active_summary.count === 0) {
-      showError(`No results for "${data.query}". Try different keywords or conditions.`);
-      setLoading(false); return;
+    if(!resp.ok) throw new Error(data.error||'Search failed');
+    if(!data.sold_summary||data.sold_summary.count===0){
+      showError(`No results for "${q}". Try different keywords.`);setLoading(false);return;
     }
     currentData = data;
     renderAll(data);
-    results.classList.add('show');
-    results.scrollIntoView({behavior:'smooth',block:'start'});
-  } catch (err) {
-    showError(err.message || 'Something went wrong.');
-  } finally { setLoading(false); }
+    $('results').classList.add('show');
+    $('results').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(err){
+    showError(err.message||'Something went wrong. Please try again.');
+  }finally{setLoading(false)}
 }
 
-async function doSearch(query) {
-  searchInput.value = query;
-  conditionSelect.value = 'all';
-  buyPriceInput.value = '';
-  currentFilterCondition = 'all';
-  currentBuyPrice = 0;
-  updateFilterBanner();
-  await executeSearch();
-}
+$('searchBtn').addEventListener('click',()=>doSearch());
+$('searchInput').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch()});
+$('applyFiltersBtn').addEventListener('click',()=>doSearch());
 
-function filterByCondition(cond) {
-  currentFilterCondition = cond;
-  conditionSelect.value = cond;
-  updateFilterBanner();
-  executeSearch();
-}
-
-function clearConditionFilter() {
-  currentFilterCondition = 'all';
-  conditionSelect.value = 'all';
-  buyPriceInput.value = '';
-  currentBuyPrice = 0;
-  updateFilterBanner();
-  executeSearch();
-}
-
-clearFilter.addEventListener('click', clearConditionFilter);
-
-function updateFilterBanner() {
-  const active = currentFilterCondition !== 'all';
-  const hasPrice = currentBuyPrice > 0;
-  filterBanner.classList.toggle('show', active || hasPrice);
-  let parts = [];
-  if (active) parts.push(`Filtered: <strong>${condLabel(currentFilterCondition)}</strong>`);
-  if (hasPrice) parts.push(`Buy price: <strong>$${currentBuyPrice.toFixed(2)}</strong>`);
-  filterBannerText.innerHTML = parts.join(' &nbsp;|&nbsp; ');
-}
-
-// ── TIME PILLS ──
-function changePeriod(period) {
-  currentPeriod = period;
-  document.querySelectorAll('.time-pill').forEach(p => p.classList.toggle('active', p.dataset.period === period));
-  executeSearch();
-}
-timePills.addEventListener('click', e => {
-  const pill = e.target.closest('.time-pill');
-  if (pill) changePeriod(pill.dataset.period);
+// ═══════════════════════════════════════════
+//  TIME PILLS
+// ═══════════════════════════════════════════
+document.querySelectorAll('.time-pill').forEach(p=>{
+  p.addEventListener('click',()=>{
+    currentPeriod=p.dataset.period;
+    document.querySelectorAll('.time-pill').forEach(pp=>pp.classList.toggle('active',pp.dataset.period===currentPeriod));
+    doSearch();
+  });
 });
 
-// ── PHOTO ──
-cameraBtn.addEventListener('click', () => imageInput.click());
-imageInput.addEventListener('change', () => {
-  const file = imageInput.files[0];
-  if (!file) return;
-  lastPickedFile = file;
-  const reader = new FileReader();
-  reader.onload = e => { photoPreview.src = e.target.result; photoDescription.value = ''; photoOverlay.classList.add('show'); };
-  reader.readAsDataURL(file);
-  imageInput.value = '';
-});
-photoCancel.addEventListener('click', () => photoOverlay.classList.remove('show'));
-photoOverlay.addEventListener('click', e => { if (e.target === photoOverlay) photoOverlay.classList.remove('show'); });
-photoSearchBtn.addEventListener('click', async () => {
-  const desc = photoDescription.value.trim();
-  if (!desc) { photoDescription.style.borderColor='var(--red)'; return; }
-  photoOverlay.classList.remove('show');
-  searchInput.value = desc;
-  if (lastPickedFile) {
-    const fd = new FormData(); fd.append('image', lastPickedFile); fd.append('description', desc);
-    try { await fetch('/api/identify', {method:'POST',body:fd}); } catch(e) {}
-  }
-  await doSearch(desc);
-});
-
-// ── RENDER ALL ──
-function renderAll(d) {
-  // Populate condition dropdown from API data
-  populateConditionSelect(d.available_conditions, d.condition_labels);
+// ═══════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════
+function renderAll(d){
   renderSummary(d);
-  renderMeta(d);
-  renderChart(d.trend, d);
-  renderSaturation(d);
-  renderLiquidity(d);
-  renderConditions(d);
+  renderDirection(d);
+  renderChart(d.trend,d);
   renderFlip(d);
   renderListings(d);
-  updateFilterBanner();
 }
 
-// ── SUMMARY CARDS (with info icons) ──
-function renderSummary(d) {
-  const s = d.sold_summary, a = d.active_summary;
-  const flip = d.flip_analysis || {};
-  const isFiltered = d.active_filter_condition !== 'all';
-  const condText = isFiltered ? ` (${condLabel(d.active_filter_condition)})` : '';
-  const profit = flip.potential_profit || 0;
-  const pct = flip.potential_profit_pct || 0;
-
-  summaryGrid.innerHTML = `
-    <div class="stat-card">
-      <div class="label-row"><div class="label">💰 Median Sold Price${condText}</div>${infoIconHtml('median_sold')}</div>
-      <div class="value">$${fmt(s.median)}</div>
-      <div class="sub">${s.count} sold listings</div>
-    </div>
-    <div class="stat-card">
-      <div class="label-row"><div class="label">📊 Sold Price Range</div>${infoIconHtml('sold_range')}</div>
-      <div class="value">$${fmt(s.low)} – $${fmt(s.high)}</div>
-      <div class="sub">Avg: $${fmt(s.mean)}</div>
-    </div>
-    <div class="stat-card">
-      <div class="label-row"><div class="label">🏷️ Current Market (Active)</div>${infoIconHtml('current_market')}</div>
-      <div class="value ${a.median && s.median && a.median < s.median ? 'green' : (a.median > s.median * 1.05 ? 'amber' : '')}">$${a.median ? fmt(a.median) : '—'}</div>
-      <div class="sub">${a.count} active listings</div>
-    </div>
-    <div class="stat-card">
-      <div class="label-row"><div class="label">📈 Market Trend</div>${infoIconHtml('market_trend')}</div>
-      <div class="value ${d.direction==='rising'?'green':(d.direction==='falling'?'red':'amber')}">${d.direction==='rising'?'↑ Rising':(d.direction==='falling'?'↓ Falling':'→ Stable')}</div>
-      <div class="sub">${d.period.toUpperCase()} period</div>
-    </div>
-    <div class="stat-card">
-      <div class="label-row"><div class="label">🔄 Flip Score</div>${infoIconHtml('flip_score')}</div>
-      <div class="value ${flip.score>=70?'green':(flip.score>=50?'':(flip.score>=30?'amber':'red'))}">${flip.score || '—'}/100</div>
-      <div class="sub">${flip.verdict || 'N/A'}</div>
-    </div>
-    <div class="stat-card">
-      <div class="label-row"><div class="label">💵 Net Profit After Fees</div>${infoIconHtml('potential_profit')}</div>
-      <div class="value ${profit >= 0 ? 'green' : 'red'}">${profit ? (profit >= 0 ? '+' : '') + '$' + fmt(profit) : '—'}</div>
-      <div class="sub">${pct ? (pct >= 0 ? '+' : '') + pct + '% margin' : ''}${flip.user_buy_price_used ? ' <span class="your-price-badge">your price</span>' : ''}</div>
-    </div>
-  `;
+function renderSummary(d){
+  const s=d.sold_summary,a=d.active_summary,f=d.flip_analysis||{};
+  const p=f.potential_profit||0,pct=f.potential_profit_pct||0;
+  $('summaryGrid').innerHTML=`
+    <div class="stat-card"><div class="label">💰 Median Sold</div><div class="value">$${fmt(s.median)}</div><div class="sub">${s.count} sold listings</div></div>
+    <div class="stat-card"><div class="label">📊 Range</div><div class="value">$${fmt(s.low)} – $${fmt(s.high)}</div><div class="sub">Avg: $${fmt(s.mean)}</div></div>
+    <div class="stat-card"><div class="label">🏷️ Active Market</div><div class="value ${a.median && s.median && a.median < s.median ? 'green' : (a.median > s.median * 1.05 ? 'amber' : '')}">$${a.median?fmt(a.median):'—'}</div><div class="sub">${a.count} active</div></div>
+    <div class="stat-card"><div class="label">📈 Trend</div><div class="value ${d.direction==='rising'?'green':(d.direction==='falling'?'red':'amber')}">${d.direction==='rising'?'↑ Rising':(d.direction==='falling'?'↓ Falling':'→ Stable')}</div><div class="sub">${d.period.toUpperCase()}</div></div>
+    <div class="stat-card"><div class="label">🔄 Flip Score</div><div class="value ${(f.score||0)>=70?'green':((f.score||0)>=50?'':((f.score||0)>=30?'amber':'red'))}">${f.score||'—'}/100</div><div class="sub">${f.verdict||'N/A'}</div></div>
+    <div class="stat-card"><div class="label">💵 Net Profit</div><div class="value ${p>=0?'green':'red'}">${p>=0?'+':''}$${fmt(p)}</div><div class="sub">${pct>=0?'+':''}${pct}%${f.user_buy_price_used?' <span class="your-price-badge">your price</span>':''}</div></div>`;
 }
 
-// ── META ROW ──
-function renderMeta(d) {
-  const dir = d.direction;
-  const src = d.data_source || 'Smart Estimate';
-  const isEst = src.includes('Estimate');
-  const explanation = (d.flip_analysis && d.flip_analysis.market_explanation) || '';
-
-  metaRow.innerHTML = `
-    <span class="direction-badge ${dir} explain-trigger" id="explainTrigger">
+function renderDirection(d){
+  const dir=d.direction,src=d.data_source||'Smart Estimate';
+  const expl=(d.flip_analysis||{}).market_explanation||'Not enough data.';
+  $('directionRow').innerHTML=`
+    <span class="direction-badge ${dir}" id="explainTrigger">
       ${dir==='rising'?'📈 Market Rising':(dir==='falling'?'📉 Market Falling':'📊 Market Stable')}
       <span style="font-size:.7rem;opacity:.7">ⓘ</span>
-      <div class="explain-popup" id="explainPopup">${escHtml(explanation)}</div>
+      <div class="explain-popup" id="explainPopup">${esc(expl)}</div>
     </span>
-    <span class="source-tag">
-      Data: <strong style="color:${isEst?'var(--amber)':'var(--green)'}">${escHtml(src)}</strong>
-      ${d.ebay_url ? `<a href="${escHtml(d.ebay_url)}" target="_blank" style="color:var(--accent);margin-left:8px;text-decoration:none">View on eBay ↗</a>` : ''}
-    </span>
-  `;
-
-  setTimeout(() => {
-    const trigger = $('explainTrigger'), popup = $('explainPopup');
-    if (trigger && popup) {
-      trigger.addEventListener('click', e => {
-        e.stopPropagation();
-        popup.classList.toggle('show');
-      });
-      document.addEventListener('click', () => popup.classList.remove('show'));
-    }
-  }, 0);
+    <span style="font-size:.75rem;color:var(--text2);margin-left:10px">Data: <strong style="color:${src.includes('Estimate')?'var(--amber)':'var(--green)'}">${esc(src)}</strong></span>`;
+  setTimeout(()=>{
+    const t=$('explainTrigger'),p=$('explainPopup');
+    if(t&&p){t.addEventListener('click',e=>{e.stopPropagation();p.classList.toggle('show')});document.addEventListener('click',()=>p.classList.remove('show'))}
+  },0);
 }
 
-// ── CHART ──
-function renderChart(trend, d) {
-  if (chartInstance) chartInstance.destroy();
-  if (!trend || trend.length < 2) return;
-
-  const labels = trend.map(t => t.date);
-  const medianData = trend.map(t => t.median);
-  const lowData = trend.map(t => t.low);
-  const highData = trend.map(t => t.high);
-  const condStr = d.active_filter_condition !== 'all' ? ` — ${condLabel(d.active_filter_condition)}` : '';
-  chartTitle.textContent = `📈 Sold Price Trend${condStr}`;
-
-  const ctx = $('priceChart').getContext('2d');
-  chartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label:'High', data:highData, borderColor:'rgba(248,113,113,.4)', backgroundColor:'rgba(248,113,113,.05)', borderWidth:1, pointRadius:0, fill:'+1', tension:.3 },
-        { label:'Median', data:medianData, borderColor:'#5b8def', backgroundColor:'rgba(91,141,239,.08)', borderWidth:2.5, pointRadius:0, fill:false, tension:.3 },
-        { label:'Low', data:lowData, borderColor:'rgba(52,211,153,.4)', backgroundColor:'rgba(52,211,153,.05)', borderWidth:1, pointRadius:0, fill:false, tension:.3 },
-      ],
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      interaction:{intersect:false,mode:'index'},
-      plugins:{
-        legend:{position:'top',labels:{color:getComputedStyle(document.body).getPropertyValue('--text2'),usePointStyle:true,padding:20,font:{size:12}}},
-        tooltip:{
-          backgroundColor:getComputedStyle(document.body).getPropertyValue('--surface'),
-          titleColor:getComputedStyle(document.body).getPropertyValue('--text'),
-          bodyColor:getComputedStyle(document.body).getPropertyValue('--text2'),
-          borderColor:getComputedStyle(document.body).getPropertyValue('--border'),borderWidth:1,
-          callbacks:{label:ctx=>` ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`}
-        }
-      },
-      scales:{
-        x:{ticks:{color:'#888',maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(128,128,128,.15)'}},
-        y:{ticks:{color:'#888',font:{size:10},callback:v=>'$'+v.toFixed(0)},grid:{color:'rgba(128,128,128,.15)'}}
-      }
-    }
-  });
+function renderChart(trend,d){
+  if(chartInstance){chartInstance.destroy();chartInstance=null}
+  if(!trend||trend.length<2)return;
+  $('chartTitle').textContent=`📈 Sold Price Trend${d.active_filter_condition&&d.active_filter_condition!=='all'?' — '+condLabel(d.active_filter_condition):''}`;
+  const ctx=$('priceChart').getContext('2d');
+  chartInstance=new Chart(ctx,{type:'line',data:{labels:trend.map(t=>t.date),datasets:[
+    {label:'High',data:trend.map(t=>t.high),borderColor:'rgba(248,113,113,.4)',backgroundColor:'rgba(248,113,113,.05)',borderWidth:1,pointRadius:0,fill:'+1',tension:.3},
+    {label:'Median',data:trend.map(t=>t.median),borderColor:'#5b8def',backgroundColor:'rgba(91,141,239,.08)',borderWidth:2.5,pointRadius:0,fill:false,tension:.3},
+    {label:'Low',data:trend.map(t=>t.low),borderColor:'rgba(52,211,153,.4)',backgroundColor:'rgba(52,211,153,.05)',borderWidth:1,pointRadius:0,fill:false,tension:.3}]},
+    options:{responsive:!0,maintainAspectRatio:!1,interaction:{intersect:!1,mode:'index'},plugins:{legend:{position:'top',labels:{color:'#9aa0a6',usePointStyle:!0,padding:20,font:{size:12}}},tooltip:{backgroundColor:'#1a1d27',titleColor:'#e8eaed',bodyColor:'#9aa0a6',borderColor:'#2a2d38',borderWidth:1,callbacks:{label:ctx=>` ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`}}},scales:{x:{ticks:{color:'#888',maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(128,128,128,.15)'}},y:{ticks:{color:'#888',font:{size:10},callback:v=>'$'+v.toFixed(0)},grid:{color:'rgba(128,128,128,.15)'}}}}});
 }
 
-// ── SATURATION SECTION ──
-function renderSaturation(d) {
-  const opp = d.opportunity || {};
-  const container = document.getElementById('saturationContainer');
-  if (!container) return;
-  if (opp.score) {
-    container.innerHTML = renderSaturationOpportunity(d);
-    container.style.display = '';
-  } else {
-    container.style.display = 'none';
-  }
-}
-
-// ── LIQUIDITY SECTION ──
-function renderLiquidity(d) {
-  const liq = (d.flip_analysis && d.flip_analysis.liquidity) ? d.flip_analysis.liquidity : null;
-  const container = document.getElementById('liquidityContainer');
-  if (!container) return;
-  if (liq) {
-    container.innerHTML = renderLiquidityMeter(liq);
-    container.style.display = '';
-  } else {
-    container.style.display = 'none';
-  }
-}
-
-// ── CONDITION BREAKDOWN ──
-function renderConditions(d) {
-  const cs = d.condition_sold || {};
-  const available = d.available_conditions || [];
-  if (available.length <= 1) { $('conditionCard').style.display = 'none'; return; }
-  $('conditionCard').style.display = '';
-  const conds = available.filter(c => c !== 'unknown' && c !== 'skip');
-  // Sort by the order in available_conditions (which is already in order from the API)
-  const condOrder = d.available_conditions || [];
-  conds.sort((a,b) => condOrder.indexOf(a) - condOrder.indexOf(b));
-
-  conditionTabs.innerHTML = conds.map((c,i) => {
-    const isActive = c === d.active_filter_condition;
-    return `<button class="cond-tab ${isActive?'active':''}" data-cond="${c}">${condLabel(c)}</button>`;
-  }).join('');
-
-  conditionPanels.innerHTML = conds.map((c,i) => {
-    const sold = cs[c] || {low:0,median:0,high:0,mean:0,count:0};
-    const ca = d.condition_active || {};
-    const active = ca[c] || {low:0,median:0,high:0,mean:0,count:0};
-    const isActive = c === d.active_filter_condition;
-    return `<div class="cond-panel ${isActive?'active':''}" data-cond="${c}">
-      <div class="summary-grid" style="margin-top:16px">
-        <div class="stat-card"><div class="label">Sold Median</div><div class="value">$${fmt(sold.median)}</div><div class="sub">${sold.count} sold</div></div>
-        <div class="stat-card"><div class="label">Sold Range</div><div class="value">$${fmt(sold.low)} – $${fmt(sold.high)}</div><div class="sub">Avg: $${fmt(sold.mean)}</div></div>
-        <div class="stat-card"><div class="label">Active Median</div><div class="value">$${fmt(active.median)}</div><div class="sub">${active.count} listed</div></div>
-        <div class="stat-card"><div class="label">Profit Potential</div><div class="value green">$${fmt(sold.median - sold.low)}</div><div class="sub">Buy low, sell median</div></div>
-      </div>
-      <button class="btn btn-primary" style="margin-top:8px" data-filter-cond="${c}">🔍 Show Only ${condLabel(c)}</button>
-    </div>`;
-  }).join('');
-
-  conditionTabs.querySelectorAll('.cond-tab').forEach(tab => {
-    tab.addEventListener('click', () => filterByCondition(tab.dataset.cond));
-  });
-  conditionPanels.querySelectorAll('[data-filter-cond]').forEach(btn => {
-    btn.addEventListener('click', e => { e.stopPropagation(); filterByCondition(btn.dataset.filterCond); });
-  });
-}
-
-function condLabel(c) {
-  // Use API-provided labels if available, otherwise fallback
-  if (currentData && currentData.condition_labels && currentData.condition_labels[c]) {
-    return currentData.condition_labels[c];
-  }
-  const map = {
-    'new (sealed)':'📦 New Sealed', 'new':'🆕 New', 'like new':'✨ Like New',
-    'cib':'📋 CIB', 'very good':'👍 Very Good', 'good':'👌 Good',
-    'acceptable':'⚠️ Acceptable', 'loose':'💿 Loose',
-    'untested':'❓ Untested', 'for parts':'🔧 For Parts',
-    'excellent':'⭐ Excellent', 'fair':'⚠️ Fair', 'poor':'🔧 Poor',
-    'unknown':'❓ Other', 'all':'All Conditions'
-  };
-  return map[c] || c.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase());
-}
-
-function populateConditionSelect(conditions, labels) {
-  ALL_CONDITIONS = [{val:'all', label:'All Conditions'}];
-  if (conditions && conditions.length > 0) {
-    conditions.forEach(c => {
-      const lbl = (labels && labels[c]) ? labels[c] : condLabel(c);
-      ALL_CONDITIONS.push({val: c, label: lbl});
-    });
-  }
-  conditionSelect.innerHTML = ALL_CONDITIONS.map(c => `<option value="${c.val}">${c.label}</option>`).join('');
-}
-
-// ── SATURATION & OPPORTUNITY ──
-function renderSaturationOpportunity(d) {
-  const opp = d.opportunity || {};
-  const sat = (opp.saturation) || {};
-  const alerts = opp.alerts || [];
-  const gaps = opp.condition_gaps || [];
-  if (!sat.tier) return '';
-
-  const oppCls = (opp.score || 0) >= 70 ? 'great' : ((opp.score || 0) >= 50 ? 'decent' : ((opp.score || 0) >= 30 ? 'risky' : 'avoid'));
-  
-  // Alert badges
-  const alertBadges = alerts.map(a => {
-    const colors = {hot: 'var(--green)', saturated: 'var(--red)', gem: 'var(--purple)'};
-    const bgs = {hot: 'rgba(52,211,153,.12)', saturated: 'rgba(248,113,113,.12)', gem: 'rgba(167,139,250,.12)'};
-    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:16px;font-size:.78rem;font-weight:600;background:${bgs[a.type]};color:${colors[a.type]};margin-right:6px">
-      ${a.icon} ${a.label}
-      <span style="font-weight:400;font-size:.7rem;cursor:help" title="${escHtml(a.desc)}">ⓘ</span>
-    </span>`;
-  }).join('');
-
-  // Ratio bar
-  const ratioPct = Math.min(100, Math.max(0, (sat.active_sold_ratio || 0) / 10 * 100));
-  const ratioColor = (sat.active_sold_ratio || 0) < 1 ? 'var(--green)' : ((sat.active_sold_ratio || 0) < 3 ? 'var(--amber)' : ((sat.active_sold_ratio || 0) < 8 ? '#f97316' : 'var(--red)'));
-
-  return `
-    <div class="flip-card" style="margin-bottom:24px">
-      ${alerts.length > 0 ? `<div style="margin-bottom:14px">${alertBadges}</div>` : ''}
-      
-      <div class="flip-header">
-        <div class="flip-score ${oppCls}" style="width:56px;height:56px;font-size:1.1rem">${opp.score || 0}</div>
-        <div>
-          <div class="flip-verdict" style="font-size:1.1rem">${escHtml(opp.verdict || 'N/A')}</div>
-          <div style="font-size:.82rem;color:var(--text2)">Market Opportunity Score</div>
-        </div>
-      </div>
-      <div class="flip-detail">${escHtml(opp.description || '')}</div>
-      
-      <div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--text2);margin-bottom:4px">
-          <span>Market Saturation</span><span><strong>${sat.label}</strong> — ${sat.active_count || 0} active / ${sat.sold_count || 0} sold</span>
-        </div>
-        <div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
-          <div style="height:100%;width:${ratioPct}%;background:${ratioColor};border-radius:4px;transition:width .5s"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:.65rem;color:var(--text2);margin-top:2px">
-          <span>🟢 Underserved</span><span>🟡 Balanced</span><span>🟠 Competitive</span><span>🔴 Over</span>
-        </div>
-        <div style="font-size:.78rem;color:var(--text2);margin-top:6px">${escHtml(sat.description || '')}</div>
-      </div>
-      
-      ${gaps.length > 0 ? `
-      <div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);font-size:.8rem">
-        <div style="font-weight:600;margin-bottom:6px">💡 Condition Gaps — Your Niche</div>
-        ${gaps.map(g => `<div style="color:var(--text2);margin-bottom:3px">🎯 <strong style="color:var(--text)">${condLabel(g.condition)}</strong>: ${escHtml(g.gap)} — ${escHtml(g.desc)}</div>`).join('')}
-      </div>` : ''}
-    </div>`;
-}
-
-// ── LIQUIDITY METER ──
-function renderLiquidityMeter(liq) {
-  if (!liq) return '';
-  const pct = Math.max(0, Math.min(100, liq.sell_through_rate || 0));
-  const barColor = pct > 30 ? 'var(--green)' : (pct > 10 ? 'var(--amber)' : 'var(--red)');
-  const daysLabel = liq.avg_days_to_sell > 180 ? '180+ days' : `~${Math.round(liq.avg_days_to_sell)} days`;
-  const volTrend = liq.volume_trend || 'stable';
-  const volIcon = volTrend === 'accelerating' ? '📈' : (volTrend === 'slowing' ? '📉' : '📊');
-  const volColor = volTrend === 'accelerating' ? 'var(--green)' : (volTrend === 'slowing' ? 'var(--red)' : 'var(--text2)');
-  
-  return `
-    <div class="flip-card" style="margin-bottom:24px">
-      <div class="flip-header">
-        <div class="flip-score ${pct > 30 ? 'great' : (pct > 10 ? 'decent' : 'avoid')}" style="width:56px;height:56px;font-size:1.1rem">${liq.label}</div>
-        <div>
-          <div class="flip-verdict" style="font-size:1.1rem">${escHtml(liq.label || '')} — ${escHtml(liq.description || '')}</div>
-        </div>
-      </div>
-      
-      <!-- Liquidity bar -->
-      <div style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--text2);margin-bottom:4px">
-          <span>Sell-Through Rate</span><span><strong>${pct.toFixed(1)}%</strong></span>
-        </div>
-        <div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width .5s"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:.65rem;color:var(--text2);margin-top:2px">
-          <span>🔴 Illiquid</span><span>🟡 Moderate</span><span>🟢 Liquid</span>
-        </div>
-      </div>
-      
-      <div class="flip-metrics">
-        <div class="flip-metric">
-          <div class="fm-label">⏱ Avg Days to Sell</div>
-          <div class="fm-value" style="color:${liq.avg_days_to_sell < 7 ? 'var(--green)' : (liq.avg_days_to_sell < 30 ? 'var(--amber)' : 'var(--red)')}">${daysLabel}</div>
-          <div class="fm-sub">${liq.velocity_per_day ? liq.velocity_per_day.toFixed(2) + ' sales/day' : ''}</div>
-        </div>
-        <div class="flip-metric">
-          <div class="fm-label">⚡ Velocity</div>
-          <div class="fm-value">${escHtml(liq.velocity_label || 'N/A')}</div>
-          <div class="fm-sub">${liq.sales_last_3mo || 0} sold in last 3mo</div>
-        </div>
-        <div class="flip-metric">
-          <div class="fm-label">${volIcon} Volume Trend</div>
-          <div class="fm-value" style="color:${volColor}">${volTrend === 'accelerating' ? '↑ Accelerating' : (volTrend === 'slowing' ? '↓ Slowing' : '→ Stable')}</div>
-          <div class="fm-sub">${liq.volume_trend_pct ? (liq.volume_trend_pct > 0 ? '+' : '') + liq.volume_trend_pct + '% vs prev' : 'N/A'}</div>
-        </div>
-        <div class="flip-metric">
-          <div class="fm-label">📊 Listing Ratio</div>
-          <div class="fm-value">${liq.sales_last_3mo || 0} sold / ${(liq.sales_last_6mo || 0) - (liq.sales_last_3mo || 0) + (liq.sales_last_3mo || 0)} listed</div>
-          <div class="fm-sub">3mo sold vs total active</div>
-        </div>
-      </div>
-    </div>`;
-}
-
-// ── FEE BREAKDOWN ──
-function renderFeeBreakdown(fc) {
-  if (!fc) return '';
-  return `
-    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-      <div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">🧾 Fee Breakdown — Selling on <strong>${escHtml(fc.platform||'eBay')}</strong></div>
-      <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:.8rem;color:var(--text2)">
-        <div>Sell Price: <strong style="color:var(--text)">$${fmt(fc.sell_price)}</strong></div>
-        <div>Platform Fee: <strong style="color:var(--red)">-$${fmt(fc.platform_fee)}</strong></div>
-        <div>Payment Fee: <strong style="color:var(--red)">-$${fmt(fc.payment_fee)}</strong></div>
-        ${fc.shipping_cost > 0 ? `<div>Shipping: <strong style="color:var(--red)">-$${fmt(fc.shipping_cost)}</strong></div>` : ''}
-        <div>Total Fees: <strong style="color:var(--red)">-$${fmt(fc.total_fees)}</strong></div>
-      </div>
-      <div style="margin-top:8px;display:flex;gap:16px;font-size:.85rem">
-        <div>Gross: <strong>$${fmt(fc.gross_profit)}</strong></div>
-        <div style="color:var(--green)">Net: <strong style="font-size:1rem">$${fmt(fc.net_profit)}</strong> (${fmt(fc.net_margin_pct)}%)</div>
-      </div>
-      <div style="font-size:.7rem;color:var(--text2);margin-top:4px">Fee formula: ${escHtml(fc.fee_breakdown||'')}</div>
-    </div>`;
-}
-
-// ── FLIPPING ANALYSIS ──
-function renderFlip(d) {
-  const f = d.flip_analysis || {};
-  if (!f.verdict) { flipCard.innerHTML = ''; return; }
-  const cls = f.score >= 70 ? 'great' : (f.score >= 50 ? 'decent' : (f.score >= 30 ? 'risky' : 'avoid'));
-  const bought = f.user_buy_price_used;
-  const p = f.potential_profit || 0;
-
-  flipCard.innerHTML = `
-    <div class="flip-header">
-      <div class="flip-score ${cls}">${f.score}</div>
-      <div><div class="flip-verdict">${f.verdict}</div><div style="font-size:.85rem;color:var(--text2)">Flip Score out of 100 ${bought?'<span class="your-price-badge">based on your price</span>':''}</div></div>
-    </div>
-    <div class="flip-detail">${escHtml(f.verdict_detail || '')}</div>
+function renderFlip(d){
+  const f=d.flip_analysis||{};if(!f.verdict){$('flipCard').innerHTML='';return}
+  const cls=f.score>=70?'great':(f.score>=50?'decent':(f.score>=30?'risky':'avoid'));
+  const p=f.potential_profit||0;const fc=f.fee_calculation||{};
+  $('flipCard').innerHTML=`
+    <div class="flip-header"><div class="flip-score ${cls}">${f.score}</div><div><div class="flip-verdict">${f.verdict}</div><div style="font-size:.85rem;color:var(--text2)">Flip Score${f.user_buy_price_used?' <span class="your-price-badge">your price</span>':''}</div></div></div>
+    <div class="flip-detail">${esc(f.verdict_detail||'')}</div>
     <div class="flip-metrics">
-      <div class="flip-metric"><div class="fm-label">💵 Net Profit After Fees</div><div class="fm-value" style="color:${p>=0?'var(--green)':'var(--red)'}">${p>=0?'+':''}$${fmt(p)}</div><div class="fm-sub">${fmt(f.potential_profit_pct||0)}% net margin${bought?' at your price':''}</div></div>
-      <div class="flip-metric"><div class="fm-label">📊 Buy → Sell → Net</div><div class="fm-value">$${fmt(f.potential_buy_price||0)} → $${fmt(f.potential_sell_price||0)}</div><div class="fm-sub">Net: <strong style="color:${(f.potential_profit||0)>=0?'var(--green)':'var(--red)'}">${(f.potential_profit||0)>=0?'+':''}$${fmt(f.potential_profit||0)}</strong> after fees</div></div>
-      <div class="flip-metric"><div class="fm-label">🔄 Sell-Through Rate</div><div class="fm-value">${fmt(f.sell_through_rate||0)}%</div><div class="fm-sub">% of listings that sell</div></div>
-      <div class="flip-metric"><div class="fm-label">⚡ Sales Velocity</div><div class="fm-value">${fmt(f.velocity_per_day||0)}/day</div><div class="fm-sub">${f.velocity_label||'N/A'}</div></div>
+      <div class="flip-metric"><div class="fm-label">💵 Net Profit</div><div class="fm-value" style="color:${p>=0?'var(--green)':'var(--red)'}">${p>=0?'+':''}$${fmt(p)}</div><div class="fm-sub">${fmt(f.potential_profit_pct||0)}%</div></div>
+      <div class="flip-metric"><div class="fm-label">📊 Buy → Sell</div><div class="fm-value">$${fmt(f.potential_buy_price||0)} → $${fmt(f.potential_sell_price||0)}</div><div class="fm-sub">Market low → median</div></div>
+      <div class="flip-metric"><div class="fm-label">🔄 Sell-Through</div><div class="fm-value">${fmt(f.sell_through_rate||0)}%</div><div class="fm-sub">Listings that sell</div></div>
+      <div class="flip-metric"><div class="fm-label">⚡ Velocity</div><div class="fm-value">${fmt(f.velocity_per_day||0)}/day</div><div class="fm-sub">${f.velocity_label||'N/A'}</div></div>
       <div class="flip-metric"><div class="fm-label">🏪 Competition</div><div class="fm-value ${(f.competition_level||0)<30?'green':((f.competition_level||0)<60?'':'red')}">${f.competition_level||0}%</div><div class="fm-sub">${(f.competition_level||0)<30?'Low':((f.competition_level||0)<60?'Moderate':'High')}</div></div>
-      <div class="flip-metric"><div class="fm-label">⚠️ Risk</div><div class="fm-value ${(f.risk_level||'')==='Low'?'green':((f.risk_level||'')==='High'?'red':'amber')}">${f.risk_level||'N/A'}</div><div class="fm-sub">Volatility: ${fmt(f.volatility||0)}%</div></div>
-      ${f.best_condition_to_flip?`<div class="flip-metric" style="grid-column:span 2"><div class="fm-label">🎯 Best Condition to Flip</div><div class="fm-value" style="color:var(--green)">${condLabel(f.best_condition_to_flip)}</div><div class="fm-sub">Best margin: $${fmt(f.best_condition_margin||0)}</div></div>`:''}
+      <div class="flip-metric"><div class="fm-label">⚠️ Risk</div><div class="fm-value ${(f.risk_level||'')==='Low'?'green':((f.risk_level||'')==='High'?'red':'amber')}">${f.risk_level||'N/A'}</div><div class="fm-sub">Vol: ${fmt(f.volatility||0)}%</div></div>
     </div>
-    ${f.fee_calculation ? renderFeeBreakdown(f.fee_calculation) : ''}`;
+    ${fc.platform?`<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:.8rem;color:var(--text2)">🧾 Fees on ${esc(fc.platform)}: Platform $${fmt(fc.platform_fee)} + Payment $${fmt(fc.payment_fee)} + Ship $${fmt(fc.shipping_cost)} = <strong style="color:var(--red)">-$${fmt(fc.total_fees)}</strong> | Gross $${fmt(fc.gross_profit)} → Net <strong style="color:${fc.net_profit>=0?'var(--green)':'var(--red)'}">$${fmt(fc.net_profit)}</strong></div>`:''}`;
 }
 
-// ── LISTINGS ──
-function renderListings(d) {
-  soldListings.innerHTML = d.recent_sold.length === 0
-    ? '<div class="empty-state"><p>No sold listings found for this condition.</p></div>'
-    : d.recent_sold.map(item => `
-      <div class="listing-row" onclick="window.open('${escHtml(item.url||'#')}','_blank')">
-        <span class="item-title">${escHtml(item.title||'')}</span>
-        ${item.condition?`<span class="item-condition">${condLabel(item.condition)}</span>`:''}
-        <span class="item-date">${escHtml(item.sold_date||'')}</span>
-        <span class="item-price">$${fmt(item.price||0)}</span>
-        <span class="external-link">↗</span>
-      </div>`).join('');
-
-  activeListings.innerHTML = d.active_listings.length === 0
-    ? '<div class="empty-state"><p>No active listings found for this condition.</p></div>'
-    : d.active_listings.map(item => `
-      <div class="listing-row" onclick="window.open('${escHtml(item.url||'#')}','_blank')">
-        <span class="item-title">${escHtml(item.title||'')}</span>
-        ${item.condition?`<span class="item-condition">${condLabel(item.condition)}</span>`:''}
-        <span class="item-price">$${fmt(item.price||0)}</span>
-        <span class="external-link">↗</span>
-      </div>`).join('');
-}
-
-// ── LISTING TABS ──
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    const target = document.getElementById('tab-' + btn.dataset.tab);
-    if (target) target.classList.add('active');
-  });
-});
-
-// ── HELPERS ──
-function setLoading(on) {
-  spinner.classList.toggle('show', on);
-  statusText.textContent = on ? '🔎 Searching PriceCharting & eBay for real-time data...' : '';
-}
-function showError(msg) { errorMsg.textContent = msg; errorMsg.classList.add('show'); }
-function hideError() { errorMsg.classList.remove('show'); }
-function fmt(n) { return (n || 0).toFixed ? (n || 0).toFixed(2) : '0.00'; }
-function escHtml(s) { const d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
-
-// ═══════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════
-// ═══════════════════════════════════════════
-//  AUTH SYSTEM
-// ═══════════════════════════════════════════
-
-let authToken = localStorage.getItem('pricespy_token') || '';
-let currentUser = null;
-
-const authOverlay = document.getElementById('authOverlay');
-const authBtn = document.getElementById('authBtn');
-const authTitle = document.getElementById('authTitle');
-const authForm = document.getElementById('authForm');
-const authEmail = document.getElementById('authEmail');
-const authPassword = document.getElementById('authPassword');
-const authName = document.getElementById('authName');
-const authError = document.getElementById('authError');
-const authSubmit = document.getElementById('authSubmit');
-const authToggleBtn = document.getElementById('authToggle');
-const authCancel = document.getElementById('authCancel');
-const googleLogin = document.getElementById('googleLogin');
-const userName = document.getElementById('userName');
-const alertBadge = document.getElementById('alertBadge');
-
-let isRegistering = false;
-
-authBtn.addEventListener('click', () => { authOverlay.classList.add('show'); updateAuthForm(); });
-authCancel.addEventListener('click', () => authOverlay.classList.remove('show'));
-authOverlay.addEventListener('click', e => { if (e.target === authOverlay) authOverlay.classList.remove('show'); });
-authToggleBtn.addEventListener('click', () => { isRegistering = !isRegistering; updateAuthForm(); });
-authSubmit.addEventListener('click', handleAuth);
-googleLogin.addEventListener('click', () => { authError.textContent = 'Google Sign-In requires a Google Cloud Client ID. Use email/password for now.'; authError.style.display = 'block'; });
-
-function updateAuthForm() {
-  authTitle.textContent = isRegistering ? '📝 Create Account' : '👤 Login';
-  authSubmit.textContent = isRegistering ? 'Create Account' : 'Login';
-  authToggleBtn.textContent = isRegistering ? 'Already have an account?' : 'Create account';
-  authName.style.display = isRegistering ? 'block' : 'none';
-  authError.style.display = 'none';
-}
-
-async function handleAuth() {
-  const email = authEmail.value.trim();
-  const pw = authPassword.value.trim();
-  const name = authName.value.trim();
-  if (!email || !pw) { authError.textContent = 'Email and password required'; authError.style.display = 'block'; return; }
-  if (isRegistering && pw.length < 6) { authError.textContent = 'Password must be 6+ characters'; authError.style.display = 'block'; return; }
-
-  const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
-  const body = isRegistering ? { email, password: pw, display_name: name || email.split('@')[0] } : { email, password: pw };
-
-  try {
-    const resp = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Auth failed');
-    authToken = data.token;
-    currentUser = data.user;
-    localStorage.setItem('pricespy_token', authToken);
-    localStorage.setItem('pricespy_user', JSON.stringify(currentUser));
-    authOverlay.classList.remove('show');
-    updateAuthUI();
-  } catch (err) {
-    authError.textContent = err.message;
-    authError.style.display = 'block';
-  }
-}
-
-function updateAuthUI() {
-  if (currentUser) {
-    authBtn.style.display = 'none';
-    userName.style.display = 'inline';
-    userName.textContent = '👤 ' + (currentUser.display_name || currentUser.email);
-    loadAlerts();
-    registerPushNotifications();
-  } else {
-    authBtn.style.display = 'inline-block';
-    userName.style.display = 'none';
-    alertBadge.style.display = 'none';
-  }
-}
-
-authBtn.addEventListener('click', () => { authOverlay.classList.add('show'); updateAuthForm(); });
-
-// Load user from localStorage
-try {
-  const saved = localStorage.getItem('pricespy_user');
-  if (saved) currentUser = JSON.parse(saved);
-  updateAuthUI();
-} catch(e) {}
-
-// ═══════════════════════════════════════════
-//  WATCHLIST & DEAL HISTORY
-// ═══════════════════════════════════════════
-
-const navSearch = document.getElementById('navSearch');
-const navWatchlist = document.getElementById('navWatchlist');
-const navDeals = document.getElementById('navDeals');
-const watchlistPage = document.getElementById('watchlistPage');
-const watchlistContent = document.getElementById('watchlistContent');
-const dealsPage = document.getElementById('dealsPage');
-const dealsContent = document.getElementById('dealsContent');
-const refreshAllBtn = document.getElementById('refreshAllBtn');
-const mainSection = document.querySelector('.search-section');
-const statusBar = document.querySelector('.status-bar');
-
-navSearch.addEventListener('click', () => showPage('search'));
-navWatchlist.addEventListener('click', () => showPage('watchlist'));
-navDeals.addEventListener('click', () => showPage('deals'));
-
-function showPage(page) {
-  navSearch.classList.toggle('active', page === 'search');
-  navWatchlist.classList.toggle('active', page === 'watchlist');
-  navInventory.classList.toggle('active', page === 'inventory');
-  navLot.classList.toggle('active', page === 'lot');
-  navTrending.classList.toggle('active', page === 'trending');
-  navDeals.classList.toggle('active', page === 'deals');
-  
-  const results = document.getElementById('results');
-  const catholic = document.getElementById('catholicBar');
-  const bible = document.getElementById('bibleFooter');
-  
-  if (page === 'search') {
-    if (mainSection) mainSection.style.display = '';
-    if (statusBar) statusBar.style.display = '';
-    if (results) results.style.display = currentData ? 'block' : 'none';
-    watchlistPage.style.display = 'none';
-    dealsPage.style.display = 'none';
-    if (trendingPage) trendingPage.style.display = 'none';
-    if (inventoryPage) inventoryPage.style.display = 'none';
-    if (lotPage) lotPage.style.display = 'none';
-    if (catholic) catholic.style.display = '';
-    if (bible) bible.style.display = '';
-  } else if (page === 'watchlist') {
-    if (mainSection) mainSection.style.display = 'none';
-    if (statusBar) statusBar.style.display = 'none';
-    if (results) results.style.display = 'none';
-    watchlistPage.style.display = 'block';
-    dealsPage.style.display = 'none';
-    if (trendingPage) trendingPage.style.display = 'none';
-    if (catholic) catholic.style.display = 'none';
-    if (bible) bible.style.display = 'none';
-    loadWatchlist();
-  } else if (page === 'deals') {
-    if (mainSection) mainSection.style.display = 'none';
-    if (statusBar) statusBar.style.display = 'none';
-    if (results) results.style.display = 'none';
-    watchlistPage.style.display = 'none';
-    dealsPage.style.display = 'block';
-    if (trendingPage) trendingPage.style.display = 'none';
-    if (catholic) catholic.style.display = 'none';
-    if (bible) bible.style.display = 'none';
-    loadDealHistory();
-  } else if (page === 'inventory') {
-    if (mainSection) mainSection.style.display = 'none';
-    if (statusBar) statusBar.style.display = 'none';
-    if (results) results.style.display = 'none';
-    watchlistPage.style.display = 'none'; dealsPage.style.display = 'none';
-    if (trendingPage) trendingPage.style.display = 'none';
-    if (lotPage) lotPage.style.display = 'none';
-    if (inventoryPage) inventoryPage.style.display = 'block';
-    if (catholic) catholic.style.display = 'none';
-    if (bible) bible.style.display = 'none';
-    loadInventory();
-  } else if (page === 'lot') {
-    if (mainSection) mainSection.style.display = 'none';
-    if (statusBar) statusBar.style.display = 'none';
-    if (results) results.style.display = 'none';
-    watchlistPage.style.display = 'none'; dealsPage.style.display = 'none';
-    if (trendingPage) trendingPage.style.display = 'none';
-    if (inventoryPage) inventoryPage.style.display = 'none';
-    if (lotPage) lotPage.style.display = 'block';
-    if (catholic) catholic.style.display = 'none';
-    if (bible) bible.style.display = 'none';
-  } else if (page === 'trending') {
-    if (mainSection) mainSection.style.display = 'none';
-    if (statusBar) statusBar.style.display = 'none';
-    if (results) results.style.display = 'none';
-    watchlistPage.style.display = 'none';
-    dealsPage.style.display = 'none';
-    if (trendingPage) trendingPage.style.display = 'block';
-    if (catholic) catholic.style.display = 'none';
-    if (bible) bible.style.display = 'none';
-    loadTrending();
-  }
-}
-
-async function loadWatchlist() {
-  if (!authToken) { watchlistContent.innerHTML = '<div class="empty-state"><p>👤 Login to save items to your watchlist</p></div>'; return; }
-  try {
-    const resp = await fetch('/api/watchlist?token=' + authToken);
-    const items = await resp.json();
-    if (!Array.isArray(items)) { watchlistContent.innerHTML = '<div class="empty-state"><p>Login failed. Please login again.</p></div>'; return; }
-    if (items.length === 0) {
-      watchlistContent.innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><p>No items watched yet. Search for something and click the star to track it.</p></div>';
-      return;
-    }
-    watchlistContent.innerHTML = items.map(it => {
-      const chg = it.price_change_pct || 0;
-      const arrow = chg > 0 ? '📈 +' : (chg < 0 ? '📉 ' : '→ ');
-      const color = chg > 5 ? 'var(--green)' : (chg < -10 ? 'var(--red)' : 'var(--text2)');
-      return `<div class="listing-row" style="padding:16px">
-        <span class="item-title" style="font-weight:600">${escHtml(it.query)}</span>
-        <span style="font-size:.75rem;color:var(--text2)">${it.condition_filter !== 'all' ? condLabel(it.condition_filter) : ''}</span>
-        <span style="font-weight:700">$${fmt(it.last_median)}</span>
-        <span style="color:${color};font-size:.8rem">${arrow}${Math.abs(chg).toFixed(1)}%</span>
-        <span style="font-size:.75rem;color:var(--text2)">Score: ${it.last_score}/100</span>
-        <button class="btn btn-ghost" style="padding:4px 10px;font-size:.7rem" onclick="event.stopPropagation();removeWatchlist(${it.id})">✕</button>
-      </div>`;
-    }).join('');
-  } catch(e) { watchlistContent.innerHTML = '<div class="empty-state"><p>Could not load watchlist</p></div>'; }
-}
-
-async function loadDealHistory() {
-  if (!authToken) { dealsContent.innerHTML = '<div class="empty-state"><p>👤 Login to save your deal scans</p></div>'; return; }
-  try {
-    const resp = await fetch('/api/deal-history?token=' + authToken);
-    const items = await resp.json();
-    if (items.length === 0) {
-      dealsContent.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>No deal scans yet. Use Quick Deal mode to scan items.</p></div>';
-      return;
-    }
-    dealsContent.innerHTML = items.map(it => {
-      const isBuy = it.verdict === 'BUY';
-      return `<div class="listing-row" style="padding:16px">
-        <span style="font-size:1.2rem">${isBuy ? '🔥' : '🚫'}</span>
-        <span class="item-title">${escHtml(it.item_name || '')}</span>
-        <span style="font-size:.75rem;color:var(--text2)">${escHtml(it.detected_condition||'')}</span>
-        <span style="font-weight:700">$${fmt(it.your_price)} → $${fmt(it.market_median)}</span>
-        <span style="color:${(it.net_profit||0)>=0?'var(--green)':'var(--red)'};font-weight:700">${(it.net_profit||0)>=0?'+':''}$${fmt(it.net_profit)}</span>
-        <span style="font-size:.75rem;color:var(--text2)">${it.created_at ? it.created_at.substring(0,10) : ''}</span>
-      </div>`;
-    }).join('');
-  } catch(e) { dealsContent.innerHTML = '<div class="empty-state"><p>Could not load history</p></div>'; }
-}
-
-async function removeWatchlist(id) {
-  if (!authToken) return;
-  await fetch('/api/watchlist/' + id + '?token=' + authToken, { method: 'DELETE' });
-  loadWatchlist();
-}
-
-if (refreshAllBtn) refreshAllBtn.addEventListener('click', async () => {
-  if (!authToken) return;
-  refreshAllBtn.textContent = '🔄 Refreshing...';
-  await fetch('/api/watchlist/refresh-all?token=' + authToken, { method: 'POST' });
-  refreshAllBtn.textContent = '🔄 Refresh All Prices';
-  loadWatchlist();
-});
-
-// Auto-save Quick Deal results to history
-const origRenderQD = renderQuickDealResult;
-renderQuickDealResult = function(data) {
-  origRenderQD(data);
-  if (authToken && data.verdict) {
-    fetch('/api/deal-history?token=' + authToken, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        item_name: data.item_name,
-        detected_condition: data.detected_condition,
-        your_price: data.your_price,
-        market_median: data.market_median,
-        net_profit: data.net_profit,
-        flip_score: data.flip_score,
-        verdict: data.verdict
-      })
-    }).catch(() => {});
-  }
-};
-
-// Add star button to save current search to watchlist
-let watchlistStarAdded = false;
-
-// Load alerts
-async function loadAlerts() {
-  if (!authToken) return;
-  try {
-    const resp = await fetch('/api/alerts?token=' + authToken);
-    const data = await resp.json();
-    if (data.unread > 0) {
-      alertBadge.textContent = data.unread;
-      alertBadge.style.display = 'inline-block';
-      alertBadge.onclick = () => { alertBadge.style.display = 'none'; fetch('/api/alerts/read-all?token='+authToken,{method:'POST'}); };
-    }
-  } catch(e) {}
+function renderListings(d){
+  $('soldListings').innerHTML=d.recent_sold&&d.recent_sold.length?d.recent_sold.map(it=>`<div class="listing-row" onclick="window.open('${esc(it.url||'#')}','_blank')"><span class="item-title">${esc(it.title||'')}</span>${it.condition?`<span class="item-condition">${condLabel(it.condition)}</span>`:''}<span class="item-date">${esc(it.sold_date||'')}</span><span class="item-price">$${fmt(it.price)}</span></div>`).join(''):'<div class="empty-state"><p>No sold listings found.</p></div>';
+  $('activeListings').innerHTML=d.active_listings&&d.active_listings.length?d.active_listings.map(it=>`<div class="listing-row" onclick="window.open('${esc(it.url||'#')}','_blank')"><span class="item-title">${esc(it.title||'')}</span>${it.condition?`<span class="item-condition">${condLabel(it.condition)}</span>`:''}<span class="item-price">$${fmt(it.price)}</span></div>`).join(''):'<div class="empty-state"><p>No active listings found.</p></div>';
 }
 
 // ═══════════════════════════════════════════
-//  FIREBASE INIT
+//  TABS
 // ═══════════════════════════════════════════
-
-const FIREBASE_CONFIG = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID"
-};
-
-let firebaseApp = null;
-let firebaseAuth = null;
-let firebaseDb = null;
-
-// Initialize Firebase if config is provided
-function initFirebase() {
-  if (FIREBASE_CONFIG.apiKey === "YOUR_FIREBASE_API_KEY") {
-    console.log("ℹ️ Firebase not configured — using local accounts");
-    return false;
-  }
-  try {
-    firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
-    firebaseAuth = firebase.auth();
-    firebaseDb = firebase.firestore();
-    console.log("🔥 Firebase initialized");
-    return true;
-  } catch(e) {
-    console.log("⚠️ Firebase init failed:", e.message);
-    return false;
-  }
-}
-
-const firebaseReady = initFirebase();
+document.querySelectorAll('.tab-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');const t=document.getElementById('tab-'+btn.dataset.tab);if(t)t.classList.add('active')})});
 
 // ═══════════════════════════════════════════
-//  GOOGLE SIGN-IN
+//  NAVIGATION
 // ═══════════════════════════════════════════
-
-googleLogin.addEventListener('click', async () => {
-  if (!firebaseReady || !firebaseAuth) {
-    authError.textContent = 'Firebase not configured. Use email/password or check config.';
-    authError.style.display = 'block';
-    return;
-  }
-  try {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    const result = await firebaseAuth.signInWithPopup(provider);
-    const idToken = await result.user.getIdToken();
-    
-    // Exchange Firebase token for our session token
-    const resp = await fetch('/api/auth/firebase', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({id_token: idToken})
-    });
-    const data = await resp.json();
-    if (data.token) {
-      authToken = data.token;
-      currentUser = data.user;
-      localStorage.setItem('pricespy_token', authToken);
-      localStorage.setItem('pricespy_user', JSON.stringify(currentUser));
-      authOverlay.classList.remove('show');
-      updateAuthUI();
-    }
-  } catch(err) {
-    authError.textContent = 'Google sign-in failed: ' + err.message;
-    authError.style.display = 'block';
-  }
-});
+$('navSearch').addEventListener('click',()=>{$('searchSection').style.display='';$('results').style.display=currentData?'block':'none';$('watchlistPage')&&($('watchlistPage').style.display='none');$('dealsPage')&&($('dealsPage').style.display='none')});
 
 // ═══════════════════════════════════════════
-//  PUSH NOTIFICATIONS
+//  AUTH (localStorage)
 // ═══════════════════════════════════════════
-
-let pushToken = null;
-
-async function registerPushNotifications() {
-  if (!firebaseReady || !('serviceWorker' in navigator)) return;
-  
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return;
-    
-    const messaging = firebase.messaging();
-    pushToken = await messaging.getToken({
-      vapidKey: 'YOUR_VAPID_KEY'
-    });
-    console.log('🔔 Push token:', pushToken);
-    // Save push token to your backend
-    if (authToken) {
-      await fetch('/api/push-token?token=' + authToken, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({push_token: pushToken, platform: 'web'})
-      }).catch(() => {});
-    }
-    
-    // Listen for messages
-    messaging.onMessage((payload) => {
-      const notif = payload.notification;
-      if (notif && document.visibilityState !== 'visible') {
-        new Notification(notif.title, {body: notif.body, icon: '🔎'});
-      }
-    });
-  } catch(e) {
-    console.log('🔕 Push notifications not available:', e.message);
-  }
-}
+try{const u=localStorage.getItem('pricespy_user');if(u)currentUser=JSON.parse(u)}catch(e){}
+try{authToken=localStorage.getItem('pricespy_token')||''}catch(e){}
 
 // ═══════════════════════════════════════════
-//  TRENDING SEARCHES
+//  STARTUP
 // ═══════════════════════════════════════════
-
-const navTrending = document.getElementById('navTrending');
-const trendingPage = document.getElementById('trendingPage');
-const trendingContent = document.getElementById('trendingContent');
-
-if (navTrending) {
-  navTrending.addEventListener('click', () => showPage('trending'));
-}
-
-async function loadTrending() {
-  if (!trendingContent) return;
-  try {
-    const resp = await fetch('/api/trending');
-    const items = await resp.json();
-    if (items.length === 0) {
-      trendingContent.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>No trending data yet. Start searching to populate trends.</p></div>';
-      return;
-    }
-    trendingContent.innerHTML = items.map((it, i) => {
-      const barW = Math.max(5, Math.min(100, (it.count / (items[0]?.count || 1)) * 100));
-      return `<div class="listing-row" style="padding:12px 16px;cursor:pointer" onclick="searchInput.value='${escHtml(it.query)}';showPage('search');doSearch('${escHtml(it.query)}')">
-        <span style="font-weight:700;color:var(--text2);min-width:30px">#${i+1}</span>
-        <span class="item-title">${escHtml(it.query)}</span>
-        <span style="font-size:.75rem;color:var(--text2)">${it.count} watchers</span>
-        <div style="flex:1;max-width:120px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:${barW}%;background:var(--accent);border-radius:3px"></div>
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    trendingContent.innerHTML = '<div class="empty-state"><p>Could not load trending data</p></div>';
-  }
-}
-
-// ═══════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════
-
-
-// ═══ INVENTORY TRACKER (Change #8) ═══
-const inventoryPage = document.getElementById('inventoryPage');
-const inventoryContent = document.getElementById('inventoryContent');
-const inventoryStats = document.getElementById('inventoryStats');
-const invOverlay = document.getElementById('invOverlay');
-const navInventory = document.getElementById('navInventory');
-const navLot = document.getElementById('navLot');
-const lotPage = document.getElementById('lotPage');
-if (navInventory) navInventory.addEventListener('click', () => showPage('inventory'));
-if (navLot) navLot.addEventListener('click', () => showPage('lot'));
-
-document.getElementById('addInventoryBtn')?.addEventListener('click', () => invOverlay.classList.add('show'));
-document.getElementById('invCancel')?.addEventListener('click', () => invOverlay.classList.remove('show'));
-invOverlay?.addEventListener('click', e => { if (e.target === invOverlay) invOverlay.classList.remove('show'); });
-
-document.getElementById('invSaveBtn')?.addEventListener('click', async () => {
-  if (!authToken) { alert('Login first'); return; }
-  const body = {
-    item_name: document.getElementById('invName').value.trim(),
-    buy_price: parseFloat(document.getElementById('invBuyPrice').value) || 0,
-    platform: document.getElementById('invPlatform').value,
-    condition: document.getElementById('invCondition').value.trim(),
-    status: document.getElementById('invStatus').value,
-    sold_price: parseFloat(document.getElementById('invSoldPrice').value) || 0,
-  };
-  if (!body.item_name) return;
-  await fetch('/api/inventory?token=' + authToken, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-  invOverlay.classList.remove('show');
-  document.getElementById('invName').value = '';
-  document.getElementById('invBuyPrice').value = '';
-  document.getElementById('invSoldPrice').value = '';
-  loadInventory();
-});
-
-async function loadInventory() {
-  if (!authToken) { inventoryContent.innerHTML = '<div class="empty-state"><p>Login to track inventory</p></div>'; return; }
-  try {
-    const [items, stats] = await Promise.all([
-      fetch('/api/inventory?token='+authToken).then(r=>r.json()),
-      fetch('/api/inventory/stats?token='+authToken).then(r=>r.json())
-    ]);
-    inventoryStats.innerHTML = stats ? `
-      <div class="summary-grid">
-        <div class="stat-card"><div class="label">📦 Total Items</div><div class="value">${stats.total_items}</div><div class="sub">$${fmt(stats.total_cost)} invested</div></div>
-        <div class="stat-card"><div class="label">📝 Listed</div><div class="value">${stats.listed}</div><div class="sub">Waiting to sell</div></div>
-        <div class="stat-card"><div class="label">💰 Sold</div><div class="value">${stats.sold}</div><div class="sub">$${fmt(stats.sold_revenue)} revenue</div></div>
-        <div class="stat-card"><div class="label">💵 Net Profit</div><div class="value ${(stats.sold_profit||0)>=0?'green':'red'}">${(stats.sold_profit||0)>=0?'+':''}$${fmt(stats.sold_profit)}</div><div class="sub">From sold items</div></div>
-      </div>` : '';
-    if (!items || items.length === 0) { inventoryContent.innerHTML = '<div class="empty-state"><p>No items yet. Start adding your finds!</p></div>'; return; }
-    inventoryContent.innerHTML = items.map(it => {
-      const statusIcon = it.status === 'bought' ? '📦' : (it.status === 'listed' ? '📝' : '💰');
-      const profit = (it.sold_price || 0) - (it.buy_price || 0);
-      return `<div class="listing-row" style="padding:16px;gap:20px">
-        <span style="font-size:1.3rem">${statusIcon}</span>
-        <span class="item-title" style="font-weight:600">${escHtml(it.item_name||'')}</span>
-        <span style="font-size:.75rem;color:var(--text2)">${escHtml(it.condition||'')}</span>
-        <span style="font-weight:700">$${fmt(it.buy_price)}</span>
-        ${it.status==='sold'?`<span style="color:${profit>=0?'var(--green)':'var(--red)'};font-weight:700">${profit>=0?'+':''}$${fmt(profit)}</span>`:'<span style="color:var(--text2);font-size:.75rem">${it.status}</span>'}
-        <select onchange="updateInvStatus('${it.id}',this.value)" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.75rem">
-          <option value="bought" ${it.status==='bought'?'selected':''}>📦 Bought</option>
-          <option value="listed" ${it.status==='listed'?'selected':''}>📝 Listed</option>
-          <option value="sold" ${it.status==='sold'?'selected':''}>💰 Sold</option>
-        </select>
-        <button class="btn btn-ghost" style="padding:4px 8px;font-size:.7rem" onclick="event.stopPropagation();deleteInventory('${it.id}')">✕</button>
-      </div>`;
-    }).join('');
-  } catch(e) { inventoryContent.innerHTML = '<div class="empty-state"><p>Error loading inventory</p></div>'; }
-}
-
-async function updateInvStatus(id, status) {
-  await fetch('/api/inventory/'+id+'?token='+authToken, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) });
-  loadInventory();
-}
-async function deleteInventory(id) {
-  await fetch('/api/inventory/'+id+'?token='+authToken, { method:'DELETE' });
-  loadInventory();
-}
-document.getElementById('exportCsvBtn')?.addEventListener('click', async () => {
-  const items = await fetch('/api/inventory?token='+authToken).then(r=>r.json());
-  const csv = 'Item,Condition,Buy Price,Status,Sold Price,Profit\n' + items.map(it => 
-    `"${it.item_name||''}","${it.condition||''}",${it.buy_price||0},${it.status},${it.sold_price||0},${(it.sold_price||0)-(it.buy_price||0)}`
-  ).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pricespy_inventory.csv'; a.click();
-});
-
-// ═══ LOT CALCULATOR (Change #9) ═══
-const lotItems = [];
-document.getElementById('lotAddItem')?.addEventListener('click', () => {
-  const name = document.getElementById('lotItemName').value.trim();
-  const price = parseFloat(document.getElementById('lotItemPrice').value) || 0;
-  if (!name || price <= 0) return;
-  lotItems.push({name, price});
-  document.getElementById('lotItemName').value = '';
-  document.getElementById('lotItemPrice').value = '';
-  renderLotItems();
-});
-function renderLotItems() {
-  const el = document.getElementById('lotItems');
-  if (!el) return;
-  if (lotItems.length === 0) { el.innerHTML = ''; return; }
-  el.innerHTML = '<div style="margin-bottom:12px"><strong>' + lotItems.length + ' items in lot</strong></div>' +
-    lotItems.map((it,i) => `<div class="listing-row" style="padding:10px 16px">
-      <span style="font-weight:600">${escHtml(it.name)}</span>
-      <span style="font-weight:700">$${it.price.toFixed(2)}</span>
-      <button class="btn btn-ghost" style="padding:2px 8px;font-size:.7rem" onclick="lotItems.splice(${i},1);renderLotItems()">✕</button>
-    </div>`).join('');
-}
-document.getElementById('lotCalculateBtn')?.addEventListener('click', async () => {
-  if (lotItems.length === 0) return;
-  const btn = document.getElementById('lotCalculateBtn');
-  btn.textContent = '🔄 Calculating...';
-  const plat = document.getElementById('lotPlatform').value || 'ebay';
-  const ship = parseFloat(document.getElementById('lotShipping').value) || 0;
-  try {
-    const resp = await fetch('/api/lot-calculate', { method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({items:lotItems, platform:plat, shipping_per_item:ship}) });
-    const data = await resp.json();
-    const el = document.getElementById('lotResult');
-    if (!el) return;
-    const color = data.verdict_color === 'green' ? 'var(--green)' : (data.verdict_color === 'amber' ? 'var(--amber)' : 'var(--red)');
-    el.innerHTML = `<div style="background:${data.verdict_color==='green'?'rgba(52,211,153,.08)':(data.verdict_color==='amber'?'rgba(251,191,36,.08)':'rgba(248,113,113,.08)')};border:2px solid ${color};border-radius:var(--radius);padding:24px;margin-top:20px;text-align:center">
-      <div style="font-size:2rem;color:${color};font-weight:800;margin-bottom:8px">${data.verdict}</div>
-      <div class="summary-grid" style="margin-top:16px">
-        <div class="stat-card"><div class="label">Total Cost</div><div class="value">$${fmt(data.total_cost)}</div></div>
-        <div class="stat-card"><div class="label">Market Value</div><div class="value">$${fmt(data.total_market_value)}</div></div>
-        <div class="stat-card"><div class="label">Net Profit</div><div class="value ${(data.total_profit||0)>=0?'green':'red'}">${(data.total_profit||0)>=0?'+':''}$${fmt(data.total_profit)}</div></div>
-        <div class="stat-card"><div class="label">Items</div><div class="value">${data.item_count}</div></div>
-      </div>
-      ${data.items ? data.items.map(it => `<div style="font-size:.8rem;color:var(--text2);margin-top:4px">${it.verdict==='BUY'?'✅':'❌'} ${escHtml(it.name)}: $${fmt(it.cost)} → $${fmt(it.market_median)} (net ${(it.net_profit||0)>=0?'+':''}$${fmt(it.net_profit)})</div>`).join('') : ''}
-    </div>`;
-    lotItems.length = 0; renderLotItems();
-  } catch(e) { console.error(e); }
-  btn.textContent = '⚡ Calculate Lot';
-});
-
-// ═══ MARKET TIMING (Change #10) + SELLER INTEL (Change #11) ═══
-async function loadMarketTiming(category) {
-  if (!category) return;
-  try {
-    const resp = await fetch('/api/market-timing?category=' + encodeURIComponent(category));
-    const data = await resp.json();
-    const el = document.getElementById('timingCard');
-    if (!el) return;
-    const months_html = (data.months||[]).map(m => {
-      const h = Math.round(m.demand * 60);
-      const cm = data.current_month === m.month;
-      return `<div style="text-align:center;min-width:28px">
-        <div style="font-size:.6rem;color:var(--text2)">${m.month}</div>
-        <div style="width:100%;height:${h}px;background:${cm?'var(--accent)':'var(--surface2)'};border-radius:3px;margin:2px 0;position:relative" title="${m.month}: ${(m.demand*100).toFixed(0)}% demand"></div>
-      </div>`;
-    }).join('');
-    el.innerHTML = `<div class="chart-card" style="margin-bottom:24px">
-      <h3>📅 Market Timing — ${escHtml(data.category)}</h3>
-      <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-        <div class="flip-metric"><div class="fm-label">Sell Now?</div><div class="fm-value" style="font-size:1rem">${escHtml(data.sell_verdict)}</div><div class="fm-sub">${escHtml(data.sell_desc)}</div></div>
-        <div class="flip-metric"><div class="fm-label">Buy Now?</div><div class="fm-value" style="font-size:1rem">${escHtml(data.buy_verdict)}</div><div class="fm-sub">${escHtml(data.buy_desc)}</div></div>
-      </div>
-      <div style="font-size:.7rem;color:var(--text2);margin-bottom:4px">Seasonal Demand (12-month)</div>
-      <div style="display:flex;gap:2px;align-items:flex-end;height:70px">${months_html}</div>
-      <div style="font-size:.7rem;color:var(--text2);margin-top:8px">Best sell: <strong>${data.best_sell_month}</strong> · Best buy: <strong>${data.best_buy_month}</strong></div>
-    </div>`;
-  } catch(e) {}
-}
-
-async function loadSellerIntel(query) {
-  if (!query || query.length < 3) return;
-  try {
-    const resp = await fetch('/api/seller-intel?q=' + encodeURIComponent(query));
-    const data = await resp.json();
-    const el = document.getElementById('intelCard');
-    if (!el || data.error) return;
-    el.innerHTML = `<div class="chart-card" style="margin-bottom:24px">
-      <h3>🏪 Competitive Intel — ${escHtml(data.query)}</h3>
-      <div class="summary-grid" style="margin-top:12px">
-        <div class="stat-card"><div class="label">Market Type</div><div class="value" style="font-size:1.1rem">${escHtml(data.market_label)}</div><div class="sub">${escHtml(data.market_desc)}</div></div>
-        <div class="stat-card"><div class="label">Active Median</div><div class="value">$${fmt(data.active_median)}</div><div class="sub">${data.active_count} listings</div></div>
-        <div class="stat-card"><div class="label">Sold Median</div><div class="value">$${fmt(data.sold_median)}</div><div class="sub">${data.sold_count} sales</div></div>
-        <div class="stat-card"><div class="label">Price Spread</div><div class="value">$${fmt(data.price_spread)}</div><div class="sub">${data.active_to_sold_ratio}x active/sold</div></div>
-      </div>
-      <div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text2)">${escHtml(data.price_advice)}</div>
-      ${(data.condition_gaps||[]).length > 0 ? `<div style="margin-top:8px;font-size:.8rem;color:var(--text2)">💡 Gaps: ${data.condition_gaps.map(g=>escHtml(g.condition+' '+g.gap)).join(', ')}</div>` : ''}
-    </div>`;
-  } catch(e) {}
-}
-
-// Add timing + intel containers after the chart
-const orig_renderAll = renderAll;
-renderAll = function(d) {
-  orig_renderAll(d);
-  const cat = d.category || 'general';
-  loadMarketTiming(cat);
-  loadSellerIntel(d.query);
-};
-
-function init() {
-  initTheme();
-  const today = new Date();
-  applyHolidayTheme(today);
-  setDailySymbol();
-  setBibleVerse();
-  // Refresh bible verse every hour
-  setInterval(setBibleVerse, 3600000);
-}
-
-init();
-setTimeout(() => doSearch('Nintendo Switch OLED'), 800);
+console.log('✅ PriceSpy loaded — ready to search');
+setTimeout(()=>doSearch('Nintendo Switch OLED'),1000);
 </script>
-
-<!-- LOGIN MODAL -->
-<div class="photo-preview-overlay" id="authOverlay">
-  <div class="photo-preview-card" style="max-width:420px">
-    <h3 id="authTitle">👤 Login</h3>
-    <div id="authForm">
-      <input type="email" id="authEmail" placeholder="Email" style="width:100%;padding:12px;margin-bottom:8px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.95rem;outline:none">
-      <input type="password" id="authPassword" placeholder="Password (6+ chars)" style="width:100%;padding:12px;margin-bottom:8px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.95rem;outline:none">
-      <input type="text" id="authName" placeholder="Display name" style="width:100%;padding:12px;margin-bottom:8px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:.95rem;outline:none;display:none">
-      <div id="authError" style="color:var(--red);font-size:.8rem;margin-bottom:8px;display:none"></div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="authSubmit" style="flex:1">Login</button>
-        <button class="btn btn-ghost" id="authToggle">Create account</button>
-      </div>
-      <div style="text-align:center;margin-top:12px">
-        <button class="btn btn-ghost" id="googleLogin" style="width:100%">🔵 Sign in with Google</button>
-        <div style="font-size:.7rem;color:var(--text2);margin-top:4px">(Requires Google Client ID)</div>
-      </div>
-    </div>
-    <div class="photo-preview-actions" style="margin-top:12px">
-      <button class="btn btn-ghost" id="authCancel">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- WATCHLIST PAGE -->
-<div id="watchlistPage" style="display:none">
-  <div style="max-width:1100px;margin:0 auto;padding:32px 24px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h2>⭐ Your Watchlist</h2>
-      <button class="btn btn-primary" id="refreshAllBtn">🔄 Refresh All Prices</button>
-    </div>
-    <div id="watchlistContent"></div>
-  </div>
-</div>
-
-<!-- TRENDING PAGE -->
-<div id="trendingPage" style="display:none">
-  <div style="max-width:800px;margin:0 auto;padding:32px 24px">
-    <h2 style="margin-bottom:8px">📊 Trending Searches</h2>
-    <p style="color:var(--text2);font-size:.9rem;margin-bottom:20px">What other flippers are watching. Anonymous data — no personal info shared.</p>
-    <div id="trendingContent"></div>
-  </div>
-</div>
-
-<!-- INVENTORY PAGE -->
-<div id="inventoryPage" style="display:none">
-  <div style="max-width:1100px;margin:0 auto;padding:32px 24px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h2>📦 My Inventory</h2>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="addInventoryBtn">+ Add Item</button>
-        <button class="btn btn-ghost" id="exportCsvBtn">📥 Export CSV</button>
-      </div>
-    </div>
-    <div id="inventoryStats" style="margin-bottom:20px"></div>
-    <div id="inventoryContent"></div>
-  </div>
-</div>
-
-<!-- INVENTORY ADD MODAL -->
-<div class="photo-preview-overlay" id="invOverlay">
-  <div class="photo-preview-card" style="max-width:500px">
-    <h3>📦 Add Inventory Item</h3>
-    <input type="text" id="invName" placeholder="Item name" style="width:100%;padding:10px;margin-bottom:6px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
-    <div style="display:flex;gap:6px;margin-bottom:6px">
-      <input type="number" id="invBuyPrice" placeholder="Price paid ($)" step="0.01" style="flex:1;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
-      <select id="invPlatform" style="padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-        <option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="poshmark">Poshmark</option><option value="facebook">FB</option><option value="local">Local</option>
-      </select>
-    </div>
-    <input type="text" id="invCondition" placeholder="Condition" style="width:100%;padding:10px;margin-bottom:6px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
-    <div style="display:flex;gap:6px;margin-bottom:6px">
-      <select id="invStatus" style="flex:1;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-        <option value="bought">📦 Bought</option><option value="listed">📝 Listed</option><option value="sold">💰 Sold</option>
-      </select>
-      <input type="number" id="invSoldPrice" placeholder="Sold for ($)" step="0.01" style="flex:1;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
-    </div>
-    <button class="btn btn-primary" id="invSaveBtn" style="width:100%;margin-top:6px">Save Item</button>
-    <div class="photo-preview-actions" style="margin-top:8px"><button class="btn btn-ghost" id="invCancel">Cancel</button></div>
-  </div>
-</div>
-
-<!-- LOT CALCULATOR PAGE -->
-<div id="lotPage" style="display:none">
-  <div style="max-width:800px;margin:0 auto;padding:32px 24px">
-    <h2 style="margin-bottom:8px">🧮 Lot Calculator</h2>
-    <p style="color:var(--text2);font-size:.9rem;margin-bottom:16px">Found a box of items at a yard sale? Enter each item + what you're paying. Get an instant BUY/PASS verdict.</p>
-    <div style="display:flex;gap:6px;margin-bottom:12px">
-      <input type="text" id="lotItemName" placeholder="Item name" style="flex:1;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
-      <input type="number" id="lotItemPrice" placeholder="Price" step="0.01" style="width:100px;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
-      <button class="btn btn-primary" id="lotAddItem">+ Add</button>
-    </div>
-    <div style="display:flex;gap:6px;margin-bottom:20px;align-items:center">
-      <select id="lotPlatform" style="padding:8px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text)">
-        <option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="poshmark">Poshmark</option><option value="facebook">FB</option><option value="local">Local</option>
-      </select>
-      <span style="font-size:.8rem;color:var(--text2)">Ship/item $</span>
-      <input type="number" id="lotShipping" placeholder="0" step="0.01" style="width:70px;padding:8px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);outline:none">
-      <button class="btn btn-primary" id="lotCalculateBtn" style="margin-left:auto">⚡ Calculate Lot</button>
-    </div>
-    <div id="lotItems"></div>
-    <div id="lotResult"></div>
-  </div>
-</div>
-
-<!-- DEAL HISTORY PAGE -->
-<div id="dealsPage" style="display:none">
-  <div style="max-width:1100px;margin:0 auto;padding:32px 24px">
-    <h2 style="margin-bottom:20px">📋 Deal Scan History</h2>
-    <div id="dealsContent"></div>
-  </div>
-</div>
-
 </body>
 </html>
