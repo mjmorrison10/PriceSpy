@@ -1290,9 +1290,18 @@ def _build_market_explanation(trend, sold_median, active_median, active_count,
 #  ROUTES
 # ═══════════════════════════════════════════
 
+from flask import send_file, make_response
+import os as _os
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # Serve static HTML directly — no Jinja2, no caching, no bytecode
+    path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "templates", "index.html")
+    resp = make_response(send_file(path, mimetype='text/html'))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route("/api/search")
