@@ -880,7 +880,7 @@ async function loadHot() {
     if (!items || !items.length) { D('hotFeed').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No hot items yet.</div>'; return; }
     D('hotFeed').innerHTML = items.map(function(it) {
       var vIcon = it.volume_trend === 'accelerating' ? '📈' : (it.volume_trend === 'slowing' ? '📉' : '→');
-      return '<div class="lr" style="cursor:pointer" onclick="D('q').value='' + it.query + '';showPage('search');search()"><span style="font-size:1.2rem">🔥</span><span class="it" style="font-weight:600">' + it.query + '</span><span class="ip">$' + FMT(it.market_median) + '</span><span style="font-size:.7rem;color:var(--t2)">' + vIcon + ' ' + it.watchers + ' watching</span><span style="color:' + (it.flip_score >= 70 ? 'var(--g)' : (it.flip_score >= 50 ? 'var(--am)' : 'var(--r)')) + ';font-weight:700;font-size:.8rem">' + it.flip_score + '/100</span></div>';
+      return '<div class="lr" style="cursor:pointer" data-q="' + it.query + '" class="lr trend-click" style="cursor:pointer"><span style="font-size:1.2rem">🔥</span><span class="it" style="font-weight:600">' + it.query + '</span><span class="ip">$' + FMT(it.market_median) + '</span><span style="font-size:.7rem;color:var(--t2)">' + vIcon + ' ' + it.watchers + ' watching</span><span style="color:' + (it.flip_score >= 70 ? 'var(--g)' : (it.flip_score >= 50 ? 'var(--am)' : 'var(--r)')) + ';font-weight:700;font-size:.8rem">' + it.flip_score + '/100</span></div>';
     }).join('');
   } catch(e) { D('hotFeed').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
@@ -961,6 +961,7 @@ buildListings = function(res, d) {
 };
 
 // INIT
+document.addEventListener("click",function(e){var el=e.target.closest(".trend-click");if(!el)return;var q=el.getAttribute("data-q");if(q){D("q").value=q;showPage("search");search()}});
 console.log('PriceSpy v14 ready — pure DOM, no Jinja2, no paren bugs');
 setTimeout(function() { search(); }, 600);
 </script>
