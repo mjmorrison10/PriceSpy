@@ -1381,7 +1381,7 @@ def _do_search(q: str, period_days: int, period: str,
             sold_items.append({
                 "title": f"{vi['year']} {vi['make_model']} - {cond.title()}, Clean Title",
                 "price": price, "shipping": 0.0,
-                "sold_date": (now - timedelta(days=random.randint(1, max(period_days, 30)))).strftime("%Y-%m-%d"),
+                "sold_date": (now - timedelta(days=int(abs(random.gauss(5, period_days/3)) % max(period_days, 7) + 1))).strftime("%Y-%m-%d"),
                 "url": f"https://www.kbb.com/cars-for-sale/all/{urllib.parse.quote_plus(q)}",
                 "condition": cond,
             })
@@ -1421,7 +1421,7 @@ def _do_search(q: str, period_days: int, period: str,
                                 "title": f"{best['title']} - Available",
                                 "price": round(mean_p * (0.85 + random.random() * 0.3), 2),
                                 "shipping": 0.0,
-                                "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}",
+                                "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_BIN=1&_sop=15",
                                 "condition": conds_used[i % len(conds_used)],
                             })
         except Exception:
@@ -1441,8 +1441,8 @@ def _do_search(q: str, period_days: int, period: str,
             sold_items.append({
                 "title": f"{q.title()} - {cond_labels.get(cond, cond.title())}",
                 "price": price, "shipping": 0.0,
-                "sold_date": (now - timedelta(days=random.randint(1, max(period_days, 7)))).strftime("%Y-%m-%d"),
-                "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1",
+                "sold_date": (now - timedelta(days=int(abs(random.gauss(1, period_days/4)) % max(period_days, 7) + 1))).strftime("%Y-%m-%d"),
+                "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1&LH_Complete=1",
                 "condition": cond,
             })
         for i in range(25):
@@ -1452,7 +1452,7 @@ def _do_search(q: str, period_days: int, period: str,
             active_items.append({
                 "title": f"{q.title()} - {cond_labels.get(cond, cond.title())}",
                 "price": price, "shipping": 0.0,
-                "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}",
+                "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_BIN=1&_sop=15",
                 "condition": cond,
             })
 
@@ -1758,6 +1758,75 @@ init_db()
 
 # Register all routes — must happen before gunicorn imports
 register_routes(app, _do_search)
+
+# ═══════════════════════════════════════════
+#  PHOTO GALLERY — scrape eBay listing images
+# ═══════════════════════════════════════════
+
+@app.route("/api/photos")
+def api_photos():
+    """Return eBay listing photo thumbnails for a query."""
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"error": "Query required"}), 400
+    condition = request.args.get("condition", "all")
+    limit = min(int(request.args.get("limit", "12") or 12), 24)
+
+    # Build eBay search URL with condition filter
+    u = f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}"
+    u += "&LH_Sold=1&LH_Complete=1&_ipg=60"
+    if condition and condition != "all":
+        cond_map = {
+            "new": "1000", "new (sealed)": "1000", "like new": "1500",
+            "very good": "3000", "good": "3000", "acceptable": "7000",
+            "for parts": "7000", "loose": "3000", "cib": "3000",
+        }
+        ebay_cond = cond_map.get(condition, "")
+        if ebay_cond:
+            u += f"&LH_ItemCondition={ebay_cond}"
+
+    try:
+        r = SESSION.get(u, timeout=15)
+        if r.status_code != 200:
+            return jsonify({"error": "Could not fetch eBay", "photos": []})
+    except Exception:
+        return jsonify({"error": "eBay unavailable", "photos": []})
+
+    soup = BeautifulSoup(r.text, "html.parser")
+    photos = []
+
+    for li in soup.select("li.s-item.s-item__pl-on-bottom")[:limit*2]:
+        img_el = li.select_one(".s-item__image-img img, .s-item__image img")
+        link_el = li.select_one("a.s-item__link")
+        title_el = li.select_one(".s-item__title")
+        price_el = li.select_one(".s-item__price")
+
+        img_url = ""
+        if img_el:
+            img_url = img_el.get("src", "") or img_el.get("data-src", "")
+
+        title = title_el.get_text(" ", strip=True) if title_el else ""
+        price = _clean_price(price_el.get_text(" ", strip=True)) if price_el else None
+        link = link_el.get("href", "") if link_el else ""
+
+        if not title or "shop on ebay" in title.lower():
+            continue
+        if img_url and link:
+            photos.append({
+                "title": title[:100],
+                "price": round(price, 2) if price else None,
+                "image": img_url,
+                "url": link,
+            })
+            if len(photos) >= limit:
+                break
+
+    return jsonify({
+        "query": q,
+        "condition": condition,
+        "photos": photos,
+        "ebay_url": u,
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5050))

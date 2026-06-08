@@ -930,10 +930,51 @@ async function loadCompetitor(q) {
   } catch(e) {}
 }
 
-// Add competitor card after flip card
+
+// ═══ PHOTO GALLERY ═══
+async function loadPhotos() {
+  if (!data || !data.query) return;
+  var pg = D('photoGallery');
+  if (!pg) return;
+  var fc = data.active_filter_condition || 'all';
+  pg.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📷 Loading listing photos...</div>';
+  try {
+    var r = await fetch('/api/photos?q=' + encodeURIComponent(data.query) + '&condition=' + encodeURIComponent(fc) + '&limit=8');
+    var photos = await r.json();
+    if (!photos.photos || !photos.photos.length) { pg.innerHTML = ''; return; }
+    pg.innerHTML = '<h3 style="font-size:.95rem;margin-bottom:10px">📷 Recent Sold Photos <span style="font-size:.7rem;color:var(--t2);font-weight:400">— ' + esc(data.query) + ' (' + CL(fc) + ')</span></h3><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">' + photos.photos.map(function(p) {
+      return '<a href="' + esc(p.url) + '" target="_blank" style="flex-shrink:0;text-decoration:none"><div style="background:var(--bg);border:1px solid var(--b);border-radius:var(--rs);overflow:hidden;width:140px"><img src="' + esc(p.image) + '" alt="" style="width:100%;height:100px;object-fit:contain;background:#000" onerror="this.style.display=\'none\'"><div style="padding:6px 8px;font-size:.65rem;color:var(--t)">' + esc(p.title||'').substring(0,60) + '</div><div style="padding:0 8px 6px;font-size:.7rem;font-weight:700;color:var(--g)">' + (p.price ? '$' + p.price.toFixed(2) : '') + '</div></div></a>';
+    }).join('') + '</div>';
+  } catch(e) { pg.innerHTML = ''; }
+}
+function esc(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+// Add competitor card
+ after flip card
 var orig_buildListings = buildListings;
 buildListings = function(res, d) {
-  // Add competitor card
+  
+// ═══ PHOTO GALLERY ═══
+async function loadPhotos() {
+  if (!data || !data.query) return;
+  var pg = D('photoGallery');
+  if (!pg) return;
+  var fc = data.active_filter_condition || 'all';
+  pg.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📷 Loading listing photos...</div>';
+  try {
+    var r = await fetch('/api/photos?q=' + encodeURIComponent(data.query) + '&condition=' + encodeURIComponent(fc) + '&limit=8');
+    var photos = await r.json();
+    if (!photos.photos || !photos.photos.length) { pg.innerHTML = ''; return; }
+    pg.innerHTML = '<h3 style="font-size:.95rem;margin-bottom:10px">📷 Recent Sold Photos <span style="font-size:.7rem;color:var(--t2);font-weight:400">— ' + esc(data.query) + ' (' + CL(fc) + ')</span></h3><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">' + photos.photos.map(function(p) {
+      return '<a href="' + esc(p.url) + '" target="_blank" style="flex-shrink:0;text-decoration:none"><div style="background:var(--bg);border:1px solid var(--b);border-radius:var(--rs);overflow:hidden;width:140px"><img src="' + esc(p.image) + '" alt="" style="width:100%;height:100px;object-fit:contain;background:#000" onerror="this.style.display=\'none\'"><div style="padding:6px 8px;font-size:.65rem;color:var(--t)">' + esc(p.title||'').substring(0,60) + '</div><div style="padding:0 8px 6px;font-size:.7rem;font-weight:700;color:var(--g)">' + (p.price ? '$' + p.price.toFixed(2) : '') + '</div></div></a>';
+    }).join('') + '</div>';
+  } catch(e) { pg.innerHTML = ''; }
+}
+function esc(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
+
+// Add competitor card
+
+  var pgDiv = EL('div', 'cd', res); pgDiv.id = 'photoGallery'; loadPhotos();
   var compCard = EL('div', 'cd', res);
   compCard.id = 'competitorCard';
   loadCompetitor(d.query);
