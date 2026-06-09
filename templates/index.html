@@ -979,9 +979,6 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s||''; 
       alert('Share URL: ' + sd.share_url + '\n\n' + sd.summary.query + '\nMedian: $' + FMT(sd.summary.median) + ' | ' + sd.summary.verdict + ' (' + sd.summary.flip_score + '/100)');
     } catch(e) {}
   };
-  // Original listings
-  orig_buildListings(res, d);
-};
 
 // INIT
 document.addEventListener("click",function(e){var el=e.target.closest(".trend-click");if(!el)return;var q=el.getAttribute("data-q");if(q){D("q").value=q;showPage("search");search()}});
