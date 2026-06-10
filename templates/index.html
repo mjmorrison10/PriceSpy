@@ -1018,26 +1018,6 @@ function addPostSearchCards(res, d) {
         }
       }).catch(function(){});
   }
-        var pd = await r.json();
-        if (pd.platforms) {
-          optCard.innerHTML += '<div class="gd">' + pd.platforms.map(function(p){ return '<div class="sc"><div class="lb">' + p.platform + (p.recommended?' ⭐':'') + '</div><div class="vl ' + (p.net_profit >= 0 ? 'g' : 'r') + '" style="font-size:1rem">' + (p.net_profit >= 0 ? '+' : '') + '$' + FMT(p.net_profit) + '</div><div class="sm">~' + FMT(p.days_to_sell) + 'd to sell</div></div>'; }).join('') + '</div>';
-        }
-      } catch(e) {}
-    })();
-  }
-  // Add share button
-  var shareBtn = EL('button', 'bt bt-p', res);
-  shareBtn.style.cssText = 'margin-bottom:14px';
-  shareBtn.textContent = '🔗 Share This Deal';
-  shareBtn.onclick = async function() {
-    try {
-      var r = await fetch('/api/share-deal', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:d.query, condition:d.active_filter_condition||'all', buy_price:d.flip_analysis.potential_buy_price||0})});
-      var sd = await r.json();
-      alert('Share URL: ' + sd.share_url + '\n\n' + sd.summary.query + '\nMedian: $' + FMT(sd.summary.median) + ' | ' + sd.summary.verdict + ' (' + sd.summary.flip_score + '/100)');
-    } catch(e) {}
-  };
-
-// INIT
 document.addEventListener("click",function(e){var el=e.target.closest(".trend-click");if(!el)return;var q=el.getAttribute("data-q");if(q){D("q").value=q;showPage("search");search()}});
 
 // ═══ CONDITION GO BUTTON ═══
