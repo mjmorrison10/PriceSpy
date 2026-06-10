@@ -5,6 +5,9 @@
 <title>PriceSpy</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 :root,[data-theme=dark]{--bg:#0f1117;--s:#1a1d27;--s2:#22252f;--b:#2a2d38;--t:#e8eaed;--t2:#9aa0a6;--a:#5b8def;--g:#34d399;--r:#f87171;--am:#fbbf24;--p:#a78bfa;--rad:12px;--rs:8px}
 [data-theme=light]{--bg:#f5f5f7;--s:#fff;--s2:#f0f0f3;--b:#dcdce0;--t:#1c1c1e;--t2:#6c6c74;--a:#2563eb;--g:#059669;--r:#dc2626;--am:#d97706;--p:#7c3aed}
@@ -155,6 +158,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <input type="text" id="an" placeholder="Name" class="mb1" style="display:none">
 <div class="er mb1" id="aerr"></div>
 <div class="rw"><button class="bt bt-p" id="asub" style="flex:1">Login</button><button class="bt bt-g" id="atog">Create</button></div>
+<button class="bt bt-p" id="googleLogin" style="width:100%;margin-top:6px;background:#4285f4">🔵 Sign in with Google</button>
 <button class="bt bt-g" style="width:100%;margin-top:6px" onclick="HIDE('authOv')">Cancel</button></div></div>
 
 <!-- Photo Upload Modal -->
@@ -164,6 +168,27 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="rw"><button class="bt bt-p" id="photoSearchBtn" style="flex:1">🔍 Search This Item</button><button class="bt bt-g" id="photoCancel" style="flex:1">Cancel</button></div></div></div>
 
 <script>
+// ════════════════════════════ FIREBASE ════════════════════════════
+var firebaseConfig = {
+  apiKey: "AIzaSyBkI43lN_TiTtc9XL1QrEaFJh_s4n6Nhik",
+  authDomain: "pricespy-12095.firebaseapp.com",
+  projectId: "pricespy-12095",
+  storageBucket: "pricespy-12095.firebasestorage.app",
+  messagingSenderId: "726753231810",
+  appId: "1:726753231810:web:d60b003525a06175800c5b",
+  measurementId: "G-4DEM1DZ0CL"
+};
+var fbApp = null;
+var fbAuth = null;
+var fbDb = null;
+try {
+  fbApp = firebase.initializeApp(firebaseConfig);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+  console.log("🔥 Firebase connected");
+} catch(e) { console.log("Firebase init skipped:", e.message); }
+
+// ════════════════════════════ HELPERS ════════════════════════════
 var D = function(id) { return document.getElementById(id); };
 var HIDE = function(id) { D(id).style.display = 'none'; };
 var SHOW = function(id) { D(id).style.display = 'flex'; };
@@ -242,6 +267,23 @@ setInterval(setVerse, 3600000);
 try { token = localStorage.getItem('ps-tk') || ''; user = JSON.parse(localStorage.getItem('ps-usr') || 'null'); } catch(e) {}
 if (user) { D('navAuth').textContent = user.display_name || 'User'; }
 D('navAuth').onclick = function() { SHOW('authOv'); };
+
+// Google Sign-In
+D('googleLogin').onclick = async function() {
+  if (!fbAuth) { D('aerr').textContent = 'Firebase not connected.'; D('aerr').style.display = 'block'; return; }
+  try {
+    var provider = new firebase.auth.GoogleAuthProvider();
+    var result = await fbAuth.signInWithPopup(provider);
+    var idToken = await result.user.getIdToken();
+    var r = await fetch('/api/auth/firebase', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id_token: idToken})});
+    var d = await r.json();
+    if (d.token) {
+      token = d.token; user = d.user;
+      localStorage.setItem('ps-tk', token); localStorage.setItem('ps-usr', JSON.stringify(user));
+      HIDE('authOv'); D('navAuth').textContent = user.display_name || user.email;
+    }
+  } catch(err) { D('aerr').textContent = err.message; D('aerr').style.display = 'block'; }
+};
 D('atog').onclick = function() {
   isReg = !isReg;
   D('authT').textContent = isReg ? '📝 Create Account' : '👤 Login';
