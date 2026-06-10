@@ -276,9 +276,10 @@ D('googleLogin').onclick = async function() {
     var result = await fbAuth.signInWithPopup(provider);
     var idToken = await result.user.getIdToken();
     var r = await fetch('/api/auth/firebase', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id_token: idToken})});
-    var d = await r.json();
-    if (d.token) {
-      token = d.token; user = d.user;
+    var respData = await r.json();
+    if (!r.ok) { D('aerr').textContent = respData.error || 'Server error. Is FIREBASE_CREDENTIALS set on Render?'; D('aerr').style.display = 'block'; return; }
+    if (respData.token) {
+      token = respData.token; user = respData.user;
       localStorage.setItem('ps-tk', token); localStorage.setItem('ps-usr', JSON.stringify(user));
       HIDE('authOv'); D('navAuth').textContent = user.display_name || user.email;
     }
@@ -300,7 +301,7 @@ D('asub').onclick = async function() {
     var ep = isReg ? '/api/auth/register' : '/api/auth/login';
     var b = isReg ? {email:e, password:p, display_name:n || e.split('@')[0]} : {email:e, password:p};
     var r = await fetch(ep, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
-    var d = await r.json();
+    var respData = await r.json();
     if (!r.ok) throw new Error(d.error || 'Failed');
     token = d.token;
     user = d.user;
@@ -660,7 +661,7 @@ async function rqd() {
   D('qdg').textContent = '...';
   try {
     var r = await fetch('/api/quick-deal?input=' + encodeURIComponent(inp) + '&platform=' + pl + '&shipping=' + sh.toFixed(2));
-    var d = await r.json();
+    var respData = await r.json();
     if (!r.ok) throw new Error(d.error || 'Failed');
     var isB = d.verdict === 'BUY';
     var isM = d.verdict === 'MAYBE';
@@ -812,7 +813,7 @@ D('lcalc').onclick = async function() {
   D('lcalc').textContent = '...';
   try {
     var r = await fetch('/api/lot-calculate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:LZ, platform:pl, shipping_per_item:sh})});
-    var d = await r.json();
+    var respData = await r.json();
     var c = d.verdict_color === 'green' ? 'var(--g)' : (d.verdict_color === 'amber' ? 'var(--am)' : 'var(--r)');
     var bg = d.verdict_color === 'green' ? 'rgba(52,211,153,.08)' : (d.verdict_color === 'amber' ? 'rgba(251,191,36,.08)' : 'rgba(248,113,113,.08)');
     D('lres').innerHTML = '';
@@ -892,7 +893,7 @@ D('bulkGo').onclick = async function() {
   var pl = D('bulkPlat').value || 'ebay';
   try {
     var r = await fetch('/api/bulk-price', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:items, platform:pl})});
-    var d = await r.json();
+    var respData = await r.json();
     var h = '<div class="gd" style="margin-top:12px"><div class="sc"><div class="lb">Total Cost</div><div class="vl">$' + FMT(d.total_cost) + '</div></div><div class="sc"><div class="lb">Total Profit</div><div class="vl ' + (d.total_profit >= 0 ? 'g' : 'r') + '">' + (d.total_profit >= 0 ? '+' : '') + '$' + FMT(d.total_profit) + '</div></div><div class="sc"><div class="lb">Items</div><div class="vl">' + d.total_items + '</div></div></div>';
     if (d.results) {
       h += '<div style="margin-top:10px">';
@@ -912,7 +913,7 @@ async function loadDash() {
   if (!token) { D('dashStats').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
   try {
     var r = await fetch('/api/dashboard?token=' + token);
-    var d = await r.json();
+    var respData = await r.json();
     D('dashStats').innerHTML = '<div class="sc"><div class="lb">Total Deals</div><div class="vl">' + d.total_deals + '</div><div class="sm">$' + FMT(d.total_invested) + ' invested</div></div><div class="sc"><div class="lb">Net Profit</div><div class="vl ' + (d.total_net_profit >= 0 ? 'g' : 'r') + '">' + (d.total_net_profit >= 0 ? '+' : '') + '$' + FMT(d.total_net_profit) + '</div><div class="sm">' + d.total_roi + '% ROI</div></div><div class="sc"><div class="lb">Avg Score</div><div class="vl">' + FMT(d.avg_flip_score) + '/100</div></div><div class="sc"><div class="lb">Inventory</div><div class="vl">' + (d.inventory.total_items || 0) + '</div><div class="sm">$' + FMT(d.inventory.sold_profit || 0) + ' sold profit</div></div>';
     if (d.categories && Object.keys(d.categories).length) {
       D('dashCats').innerHTML = '<h3 style="margin-top:14px">📂 By Category</h3><div class="gd">' + Object.keys(d.categories).map(function(c) { return '<div class="sc"><div class="lb">' + c + '</div><div class="vl">' + d.categories[c] + '</div></div>'; }).join('') + '</div>';
@@ -949,7 +950,7 @@ D('roiCalc').onclick = async function() {
   if (!b.buy_price || !b.sell_price) return;
   try {
     var r = await fetch('/api/true-roi', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
-    var d = await r.json();
+    var respData = await r.json();
     D('roiRes').innerHTML = '<div class="cd" style="margin-top:12px"><h3>' + (d.final_net >= 0 ? '✅ ' + d.verdict : '❌ ' + d.verdict) + '</h3><div class="gd"><div class="sc"><div class="lb">Net After Fees</div><div class="vl ' + (d.net_after_fees >= 0 ? 'g' : 'r') + '">' + (d.net_after_fees >= 0 ? '+' : '') + '$' + FMT(d.net_after_fees) + '</div></div><div class="sc"><div class="lb">Hidden Costs</div><div class="vl r">-$' + FMT(d.hidden_costs) + '</div><div class="sm">Gas/Storage/Time</div></div><div class="sc"><div class="lb">Taxes</div><div class="vl r">-$' + FMT(d.tax_amount) + '</div></div><div class="sc"><div class="lb">TRUE NET</div><div class="vl ' + (d.final_net >= 0 ? 'g' : 'r') + '" style="font-size:1.5rem">' + (d.final_net >= 0 ? '+' : '') + '$' + FMT(d.final_net) + '</div><div class="sm">' + d.final_margin + '% real margin</div></div></div></div>';
   } catch(e) { D('roiRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
 };
@@ -960,7 +961,7 @@ async function loadCompetitor(q) {
   if (!q) return;
   try {
     var r = await fetch('/api/competitor-landscape?q=' + encodeURIComponent(q));
-    var d = await r.json();
+    var respData = await r.json();
     if (d.error) return;
     var cont = D('competitorCard');
     if (!cont) return;
@@ -991,18 +992,32 @@ async function loadPhotos() {
 }
 function esc(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
 
-// Add competitor card
-// Add competitor card after flip card
+// Add competitor card + platform optimizer after flip data loads
+function addPostSearchCards(res, d) {
+  // Competitor landscape
   var compCard = EL('div', 'cd', res);
   compCard.id = 'competitorCard';
-  loadCompetitor(d.query);
-  // Add platform optimizer
+  fetch('/api/competitor-landscape?q=' + encodeURIComponent(d.query))
+    .then(function(r) { return r.json(); })
+    .then(function(cd) {
+      if (cd.error) return;
+      compCard.innerHTML = '<h3>🏪 Competitor Landscape</h3><div class="gd" style="margin-top:8px"><div class="sc"><div class="lb">Active</div><div class="vl">' + cd.total_active + '</div><div class="sm">' + cd.total_sold + ' sold</div></div><div class="sc"><div class="lb">Days to Sell</div><div class="vl">' + FMT(cd.avg_days_to_sell) + 'd</div></div></div>';
+    }).catch(function(){});
+
+  // Platform optimizer (only if user entered a buy price)
   if (d.flip_analysis && d.flip_analysis.user_buy_price_used) {
     var optCard = EL('div', 'cd', res);
-    optCard.innerHTML = '<h3>📱 Platform Comparison</h3><div class="sb">Where to list for max profit</div>';
-    (async function() {
-      try {
-        var r = await fetch('/api/platform-optimize?q=' + encodeURIComponent(d.query) + '&buy_price=' + (d.flip_analysis.potential_buy_price || 0));
+    optCard.innerHTML = '<h3>📱 Platform Comparison</h3><div class="sb">Finding best platform...</div>';
+    fetch('/api/platform-optimize?q=' + encodeURIComponent(d.query) + '&buy_price=' + (d.flip_analysis.potential_buy_price || 0))
+      .then(function(r) { return r.json(); })
+      .then(function(pd) {
+        if (pd.platforms) {
+          optCard.innerHTML = '<h3>📱 Platform Comparison</h3><div class="gd">' + pd.platforms.map(function(p) {
+            return '<div class="sc"><div class="lb">' + p.platform + (p.recommended ? ' ⭐' : '') + '</div><div class="vl ' + (p.net_profit >= 0 ? 'g' : 'r') + '" style="font-size:1rem">' + (p.net_profit >= 0 ? '+' : '') + '$' + FMT(p.net_profit) + '</div><div class="sm">~' + FMT(p.days_to_sell) + 'd</div></div>';
+          }).join('') + '</div>';
+        }
+      }).catch(function(){});
+  }
         var pd = await r.json();
         if (pd.platforms) {
           optCard.innerHTML += '<div class="gd">' + pd.platforms.map(function(p){ return '<div class="sc"><div class="lb">' + p.platform + (p.recommended?' ⭐':'') + '</div><div class="vl ' + (p.net_profit >= 0 ? 'g' : 'r') + '" style="font-size:1rem">' + (p.net_profit >= 0 ? '+' : '') + '$' + FMT(p.net_profit) + '</div><div class="sm">~' + FMT(p.days_to_sell) + 'd to sell</div></div>'; }).join('') + '</div>';
@@ -1127,7 +1142,7 @@ function detectLoop() {
 async function lookupBarcode(code) {
   try {
     var r = await fetch('/api/barcode?code=' + code);
-    var d = await r.json();
+    var respData = await r.json();
     D('qd').value = d.title ? (d.brand ? d.brand + ' ' + d.title : d.title) : code;
     setTimeout(rqd, 500);
   } catch(e) { D('qd').value = code; setTimeout(rqd, 500); }
