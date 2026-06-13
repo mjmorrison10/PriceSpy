@@ -161,6 +161,12 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <button class="bt bt-p" id="googleLogin" style="width:100%;margin-top:6px;background:#4285f4">🔵 Sign in with Google</button>
 <button class="bt bt-g" style="width:100%;margin-top:6px" onclick="HIDE('authOv')">Cancel</button></div></div>
 
+<!-- Account Menu Modal -->
+<div class="ov" id="accountOv"><div class="ovc"><h3 id="accountTitle">👤 Account</h3>
+<div id="accountInfo" style="padding:12px 0;text-align:center"></div>
+<button class="bt bt-g" id="logoutBtn" style="width:100%">🚪 Logout</button>
+<button class="bt bt-g" style="width:100%;margin-top:6px" onclick="HIDE('accountOv')">Close</button></div></div>
+
 <!-- Photo Upload Modal -->
 <div class="ov" id="photoOv"><div class="ovc"><h3>📷 Identify This Item</h3>
 <img id="photoPreview" src="" alt="Preview" style="width:100%;border-radius:var(--rs);margin-bottom:10px;max-height:240px;object-fit:contain;background:#000;display:none">
@@ -266,7 +272,20 @@ setInterval(setVerse, 3600000);
 // Auth
 try { token = localStorage.getItem('ps-tk') || ''; user = JSON.parse(localStorage.getItem('ps-usr') || 'null'); } catch(e) {}
 if (user) { D('navAuth').textContent = user.display_name || 'User'; }
-D('navAuth').onclick = function() { SHOW('authOv'); };
+D('navAuth').onclick = function() { 
+  if (token && user) { 
+    D('accountInfo').innerHTML = '<div style="font-size:1.2rem;font-weight:600;margin-bottom:4px">' + (user.display_name || 'User') + '</div><div style="color:var(--t2);font-size:.85rem">' + (user.email || '') + '</div>'; 
+    SHOW('accountOv'); 
+  } else { 
+    SHOW('authOv'); 
+  } 
+};
+D('logoutBtn').onclick = function() {
+  token = ''; user = null;
+  localStorage.removeItem('ps-tk'); localStorage.removeItem('ps-usr');
+  D('navAuth').textContent = '👤';
+  HIDE('accountOv');
+};
 
 // Google Sign-In
 D('googleLogin').onclick = async function() {
