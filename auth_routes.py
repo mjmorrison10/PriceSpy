@@ -59,8 +59,10 @@ def register_routes(app, do_search_fn):
     def auth_firebase():
         d = request.get_json(force=True,silent=True) or {}
         id_token = (d.get("id_token") or "").strip()
+        print(f"🔥 Firebase auth attempt - token length: {len(id_token)}")
         if not id_token: return jsonify({"error":"Firebase ID token required"}), 400
         fb_user = verify_firebase_id_token(id_token)
+        print(f"🔥 Firebase auth result: {fb_user}")
         if not fb_user: return jsonify({"error":"Invalid Firebase token"}), 401
         sp = _get_provider()
         uid = fb_user["uid"]; email = fb_user["email"]; name = fb_user.get("name", email.split("@")[0] if email else "User")
@@ -69,6 +71,7 @@ def register_routes(app, do_search_fn):
             if not email or not existing: sp.create_user(email, "", name, google_id=fb_user.get("uid"))
             else: uid = existing["id"]
         token = sp.create_session(uid)
+        print(f"🔥 Firebase auth success for: {email}")
         return jsonify({"token":token,"user":{"id":uid,"email":email,"display_name":name}})
 
     @app.route("/api/auth/me")
