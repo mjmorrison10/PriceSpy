@@ -516,11 +516,26 @@ def verify_firebase_id_token(id_token: str) -> dict | None:
     
     # Ensure Firebase Admin is initialized
     creds = os.environ.get("FIREBASE_CREDENTIALS", "")
-    if creds and os.path.exists(creds):
+    if creds:
         try:
             if not firebase_admin._apps:
-                firebase_admin.initialize_app(credentials.Certificate(creds))
-                print("✅ Firebase Admin initialized for token verification")
+                # Check if creds is a file path or JSON content
+                if os.path.exists(creds):
+                    # It's a file path - use it directly
+                    firebase_admin.initialize_app(credentials.Certificate(creds))
+                    print("✅ Firebase Admin initialized (from file)")
+                elif creds.strip().startswith("{"):
+                    # It's JSON content - write to temp file
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        f.write(creds)
+                        temp_path = f.name
+                    firebase_admin.initialize_app(credentials.Certificate(temp_path))
+                    os.unlink(temp_path)  # Clean up temp file
+                    print("✅ Firebase Admin initialized (from env JSON)")
+                else:
+                    print("⚠️ FIREBASE_CREDENTIALS is not a valid file path or JSON")
+                    return None
         except Exception as e:
             print(f"⚠️ Firebase Admin init failed: {e}")
             return None
