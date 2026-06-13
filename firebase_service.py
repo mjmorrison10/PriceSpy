@@ -16,7 +16,7 @@ FIREBASE_AVAILABLE = False
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, firestore
+    from firebase_admin import credentials, firestore, auth
     FIREBASE_AVAILABLE = True
 except ImportError:
     pass
@@ -511,7 +511,23 @@ def verify_firebase_id_token(id_token: str) -> dict | None:
     """Verify a Firebase Auth ID token (from client-side Firebase Auth).
     Returns user dict or None."""
     if not FIREBASE_AVAILABLE:
+        print("⚠️ Firebase not available")
         return None
+    
+    # Ensure Firebase Admin is initialized
+    creds = os.environ.get("FIREBASE_CREDENTIALS", "")
+    if creds and os.path.exists(creds):
+        try:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(credentials.Certificate(creds))
+                print("✅ Firebase Admin initialized for token verification")
+        except Exception as e:
+            print(f"⚠️ Firebase Admin init failed: {e}")
+            return None
+    else:
+        print("⚠️ FIREBASE_CREDENTIALS not set")
+        return None
+    
     try:
         decoded = firebase_admin.auth.verify_id_token(id_token)
         return {
@@ -521,5 +537,6 @@ def verify_firebase_id_token(id_token: str) -> dict | None:
             "picture": decoded.get("picture", ""),
             "firebase_sign_in_provider": decoded.get("firebase", {}).get("sign_in_provider", ""),
         }
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Firebase token verification failed: {e}")
         return None
