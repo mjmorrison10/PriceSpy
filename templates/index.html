@@ -199,6 +199,7 @@ var D = function(id) { return document.getElementById(id); };
 var HIDE = function(id) { D(id).style.display = 'none'; };
 var SHOW = function(id) { D(id).style.display = 'flex'; };
 var FMT = function(n) { return (n||0).toFixed ? Number(n).toFixed(2) : '0.00'; };
+var getToken = function() { return localStorage.getItem('ps-tk') || ''; };
 
 // Safe element creation — ZERO innerHTML string concat with parens
 var EL = function(tag, cls, parent) {
@@ -710,7 +711,7 @@ async function rqd() {
     }
     if (token && d.verdict) {
       try {
-        await fetch('/api/deal-history?token=' + token, {
+        await fetch('/api/deal-history?token=' + getToken(), {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({item_name:d.item_name, detected_condition:d.detected_condition, your_price:d.your_price, market_median:d.market_median, net_profit:d.net_profit, flip_score:d.flip_score, verdict:d.verdict})
@@ -727,7 +728,7 @@ async function rqd() {
 async function loadWl() {
   if (!token) { D('wl').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
   try {
-    var items = await fetch('/api/watchlist?token=' + token).then(function(r) { return r.json(); });
+    var items = await fetch('/api/watchlist?token=' + getToken()).then(function(r) { return r.json(); });
     if (!items || !items.length) { D('wl').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No items watched.</div>'; return; }
     D('wl').innerHTML = '';
     for (var i = 0; i < items.length; i++) {
@@ -743,16 +744,16 @@ async function loadWl() {
     }
   } catch(e) { D('wl').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
-async function delWl(id) { await fetch('/api/watchlist/' + id + '?token=' + token, {method:'DELETE'}); loadWl(); }
-D('wref').onclick = async function() { await fetch('/api/watchlist/refresh-all?token=' + token, {method:'POST'}); loadWl(); };
+async function delWl(id) { await fetch('/api/watchlist/' + id + '?token=' + getToken(), {method:'DELETE'}); loadWl(); }
+D('wref').onclick = async function() { await fetch('/api/watchlist/refresh-all?token=' + getToken(), {method:'POST'}); loadWl(); };
 
 // Inventory
 D('invAdd').onclick = function() { SHOW('invOv'); };
 async function loadInv() {
   if (!token) { D('inv').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
   try {
-    var r1 = await fetch('/api/inventory?token=' + token);
-    var r2 = await fetch('/api/inventory/stats?token=' + token);
+    var r1 = await fetch('/api/inventory?token=' + getToken());
+    var r2 = await fetch('/api/inventory/stats?token=' + getToken());
     var items = await r1.json();
     var s = await r2.json();
     if (s) {
@@ -786,16 +787,16 @@ async function loadInv() {
     }
   } catch(e) { D('inv').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
-async function delInv(id) { await fetch('/api/inventory/' + id + '?token=' + token, {method:'DELETE'}); loadInv(); }
+async function delInv(id) { await fetch('/api/inventory/' + id + '?token=' + getToken(), {method:'DELETE'}); loadInv(); }
 D('isave').onclick = async function() {
   var b = {item_name:D('in').value.trim(), buy_price:parseFloat(D('ibp').value)||0, platform:D('iplat').value, condition:D('icond').value.trim(), status:D('istat').value, sold_price:parseFloat(D('isp').value)||0};
   if (!b.item_name) return;
-  await fetch('/api/inventory?token=' + token, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
+  await fetch('/api/inventory?token=' + getToken(), {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
   HIDE('invOv');
   loadInv();
 };
 D('csvBtn').onclick = async function() {
-  var items = await fetch('/api/inventory?token=' + token).then(function(r) { return r.json(); });
+  var items = await fetch('/api/inventory?token=' + getToken()).then(function(r) { return r.json(); });
   var csv = 'Item,Condition,Buy,Status,Sold,Profit\n' + items.map(function(it) { return '"' + it.item_name + '","' + it.condition + '",' + it.buy_price + ',' + it.status + ',' + it.sold_price + ',' + ((it.sold_price||0) - it.buy_price); }).join('\n');
   var b = new Blob([csv], {type:'text/csv'});
   var a = document.createElement('a');
@@ -856,7 +857,7 @@ D('lcalc').onclick = async function() {
 async function loadDh() {
   if (!token) { D('dh').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
   try {
-    var items = await fetch('/api/deal-history?token=' + token).then(function(r) { return r.json(); });
+    var items = await fetch('/api/deal-history?token=' + getToken()).then(function(r) { return r.json(); });
     if (!items || !items.length) { D('dh').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No deals scanned.</div>'; return; }
     D('dh').innerHTML = '';
     for (var i = 0; i < items.length; i++) {
@@ -931,7 +932,7 @@ D('bulkGo').onclick = async function() {
 async function loadDash() {
   if (!token) { D('dashStats').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
   try {
-    var r = await fetch('/api/dashboard?token=' + token);
+    var r = await fetch('/api/dashboard?token=' + getToken());
     var respData = await r.json();
     D('dashStats').innerHTML = '<div class="sc"><div class="lb">Total Deals</div><div class="vl">' + d.total_deals + '</div><div class="sm">$' + FMT(d.total_invested) + ' invested</div></div><div class="sc"><div class="lb">Net Profit</div><div class="vl ' + (d.total_net_profit >= 0 ? 'g' : 'r') + '">' + (d.total_net_profit >= 0 ? '+' : '') + '$' + FMT(d.total_net_profit) + '</div><div class="sm">' + d.total_roi + '% ROI</div></div><div class="sc"><div class="lb">Avg Score</div><div class="vl">' + FMT(d.avg_flip_score) + '/100</div></div><div class="sc"><div class="lb">Inventory</div><div class="vl">' + (d.inventory.total_items || 0) + '</div><div class="sm">$' + FMT(d.inventory.sold_profit || 0) + ' sold profit</div></div>';
     if (d.categories && Object.keys(d.categories).length) {
