@@ -761,13 +761,17 @@ def _relevance_score(query: str, product_title: str) -> float:
 def _compute_stats(items: list[dict]) -> dict:
     prices = [it.get("price", 0) for it in items if it.get("price") and it.get("price") > 0.01]
     if not prices:
-        return {"low": 0, "median": 0, "high": 0, "mean": 0, "count": 0}
+        return {"low": 0, "p10": 0, "median": 0, "p90": 0, "high": 0, "mean": 0, "count": 0}
     prices.sort()
     n = len(prices)
     median = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2
+    p10_idx = max(0, int(n * 0.10) - 1)
+    p90_idx = min(n - 1, int(n * 0.90))
     return {
         "low": round(min(prices), 2),
+        "p10": round(prices[p10_idx], 2),
         "median": round(median, 2),
+        "p90": round(prices[p90_idx], 2),
         "high": round(max(prices), 2),
         "mean": round(sum(prices) / n, 2),
         "count": n,
@@ -1661,7 +1665,9 @@ def _do_search(q: str, period_days: int, period: str,
         "active_listings": active_filtered[:20],
         "data_source": data_source,
         "is_real_data": len(real_sold) >= 5,
+        "is_synthetic": len(real_sold) < 5 and not is_vehicle,
         "real_items_count": len(real_sold),
+        "confidence": "high" if len(real_sold) >= 30 else ("medium" if len(real_sold) >= 5 else "low"),
         "flip_analysis": flip,
         "ebay_url": (
             f"https://www.ebay.com/sch/i.html"
