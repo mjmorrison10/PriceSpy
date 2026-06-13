@@ -1018,6 +1018,8 @@ function addPostSearchCards(res, d) {
         }
       }).catch(function(){});
   }
+}
+
 document.addEventListener("click",function(e){var el=e.target.closest(".trend-click");if(!el)return;var q=el.getAttribute("data-q");if(q){D("q").value=q;showPage("search");search()}});
 
 // ═══ CONDITION GO BUTTON ═══
