@@ -1056,28 +1056,41 @@ D('photoInput').onchange = function() {
   reader.onload = function(e) {
     D('photoPreview').src = e.target.result;
     D('photoPreview').style.display = 'block';
-    D('photoDesc').value = '';
+    D('photoDesc').value = '🔄 Analyzing image...';
+    D('photoDesc').disabled = true;
+    D('photoDesc').placeholder = 'Describe the item...';
     SHOW('photoOv');
+    
+    // Send to AI for identification
+    var fd = new FormData();
+    fd.append('image', file);
+    fetch('/api/identify', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.description && !d.error) {
+          D('photoDesc').value = d.description;
+        } else {
+          D('photoDesc').value = '';
+          D('photoDesc').placeholder = 'Describe the item...';
+        }
+        D('photoDesc').disabled = false;
+      })
+      .catch(function(){
+        D('photoDesc').value = '';
+        D('photoDesc').placeholder = 'Describe the item...';
+        D('photoDesc').disabled = false;
+      });
   };
   reader.readAsDataURL(file);
   this.value = '';
 };
 D('photoCancel').onclick = function() { HIDE('photoOv'); };
 D('photoOv').onclick = function(e) { if (e.target === D('photoOv')) HIDE('photoOv'); };
-D('photoSearchBtn').onclick = async function() {
+D('photoSearchBtn').onclick = function() {
   var desc = D('photoDesc').value.trim();
-  if (!desc) { D('photoDesc').style.borderColor = 'var(--r)'; return; }
+  if (!desc || desc === '🔄 Analyzing image...') { return; }
   HIDE('photoOv');
   D('q').value = desc;
-  // Upload photo if available
-  if (lastPhotoFile) {
-    try {
-      var fd = new FormData();
-      fd.append('image', lastPhotoFile);
-      fd.append('description', desc);
-      await fetch('/api/identify', { method: 'POST', body: fd });
-    } catch(e) {}
-  }
   search();
 };
 

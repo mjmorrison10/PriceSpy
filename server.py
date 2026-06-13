@@ -8,6 +8,7 @@ import os
 import re
 import urllib.parse
 import traceback
+import base64
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +23,11 @@ if _this_dir not in _sys.path:
     _sys.path.insert(0, _this_dir)
 from auth_routes import register_routes
 from db_init import init_db
+
+# AI Image Analysis Configuration
+GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -1543,25 +1549,82 @@ def _do_search(q: str, period_days: int, period: str,
     return result
 
 
+def _extract_product_name(labels: list) -> str:
+    """Extract product name from Vision API labels."""
+    exclude = {'product', 'item', 'goods', 'electronics', 'text', 'font', 'logo', 'brand', 'label'}
+    product_labels = [l['description'] for l in labels 
+                      if l['score'] > 0.7 
+                      and l['description'].lower() not in exclude]
+    
+    if not product_labels:
+        best = max(labels, key=lambda x: x['score'])['description'] if labels else None
+        return best or "Unknown item"
+    
+    return ' '.join(product_labels[:3])
+
+
 @app.route("/api/identify", methods=["POST"])
 def api_identify():
+    """Analyze an image and return a product description using AI."""
     if "image" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
+        return jsonify({"error": "No image provided"}), 400
+    
     file = request.files["image"]
-    description = request.form.get("description", "").strip()
-    if not description:
-        return jsonify({
-            "error": "Please provide a text description.",
-            "hint": "e.g. 'Nike Air Max 90 sneakers'",
-        }), 400
-    import time as _time
-    filename = f"{int(_time.time())}_{file.filename}"
-    file.save(UPLOAD_FOLDER / filename)
-    return jsonify({
-        "query": description,
-        "image_saved": filename,
-        "message": f"Photo saved. Searching eBay for: {description}",
-    })
+    if not file:
+        return jsonify({"error": "No image provided"}), 400
+    
+    img_bytes = file.read()
+    
+    # Try Google Cloud Vision first
+    if GOOGLE_APPLICATION_CREDENTIALS:
+        try:
+            from google.cloud import vision
+            creds_path = GOOGLE_APPLICATION_CREDENTIALS
+            # Handle JSON content vs file path
+            if creds_path.startswith("{") or os.path.exists(creds_path):
+                if creds_path.startswith("{"):
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        f.write(creds_path)
+                        creds_path = f.name
+                client = vision.ImageAnnotatorClient.from_service_account_json(creds_path)
+                image = vision.Image(content=img_bytes)
+                response = client.label_detection(image=image)
+                labels = [{'description': l.description, 'score': l.score} 
+                          for l in response.label_annotations]
+                description = _extract_product_name(labels)
+                print(f"✅ Google Vision identified: {description}")
+                return jsonify({"description": description, "provider": "google"})
+        except Exception as e:
+            print(f"⚠️ Google Vision failed: {e}")
+    
+    # Fallback to Cloudflare Workers AI
+    if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+        try:
+            cf_url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct"
+            headers = {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}
+            b64_image = base64.b64encode(img_bytes).decode()
+            
+            payload = {
+                "messages": [{
+                    "role": "user",
+                    "content": f"Image: data:image/jpeg;base64,{b64_image}\n\nIdentify this product. Return ONLY the product name and brand if visible. Example: 'Nintendo Switch OLED'. If unclear, say 'Unknown item'."
+                }]
+            }
+            
+            resp = requests.post(cf_url, headers=headers, json=payload, timeout=30)
+            if resp.ok:
+                result = resp.json()
+                description = result.get('result', {}).get('response', '').strip()
+                if description:
+                    print(f"✅ Cloudflare AI identified: {description}")
+                    return jsonify({"description": description, "provider": "cloudflare"})
+        except Exception as e:
+            print(f"⚠️ Cloudflare failed: {e}")
+    
+    # No AI available - return empty description for manual input
+    print("⚠️ No AI services available for image identification")
+    return jsonify({"description": "", "error": "AI services unavailable", "fallback": "manual"}), 200
 
 
 
