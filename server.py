@@ -25,9 +25,18 @@ from auth_routes import register_routes
 from db_init import init_db
 
 # AI Image Analysis Configuration
-GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+
+# Configure Gemini if key is available
+if GEMINI_API_KEY:
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        print("✅ Gemini AI configured")
+    except Exception as e:
+        print(f"⚠️ Gemini configuration failed: {e}")
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -1549,8 +1558,13 @@ def _do_search(q: str, period_days: int, period: str,
     return result
 
 
+GEMINI_PROMPT = """You are a product identification expert. Look at this image and identify what product is shown.
+Return ONLY the product name and brand if visible. Examples: "Nintendo Switch OLED", "Nike Air Force 1", "iPhone 15 Pro".
+If you can't identify it, say "Unknown item". Be specific with brand names."""
+
+
 def _extract_product_name(labels: list) -> str:
-    """Extract product name from Vision API labels."""
+    """Extract product name from Vision API labels (fallback method)."""
     exclude = {'product', 'item', 'goods', 'electronics', 'text', 'font', 'logo', 'brand', 'label'}
     product_labels = [l['description'] for l in labels 
                       if l['score'] > 0.7 
@@ -1575,28 +1589,20 @@ def api_identify():
     
     img_bytes = file.read()
     
-    # Try Google Cloud Vision first
-    if GOOGLE_APPLICATION_CREDENTIALS:
+    # Try Google Gemini first (simpler API key setup)
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if gemini_key:
         try:
-            from google.cloud import vision
-            creds_path = GOOGLE_APPLICATION_CREDENTIALS
-            # Handle JSON content vs file path
-            if creds_path.startswith("{") or os.path.exists(creds_path):
-                if creds_path.startswith("{"):
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                        f.write(creds_path)
-                        creds_path = f.name
-                client = vision.ImageAnnotatorClient.from_service_account_json(creds_path)
-                image = vision.Image(content=img_bytes)
-                response = client.label_detection(image=image)
-                labels = [{'description': l.description, 'score': l.score} 
-                          for l in response.label_annotations]
-                description = _extract_product_name(labels)
-                print(f"✅ Google Vision identified: {description}")
-                return jsonify({"description": description, "provider": "google"})
+            import google.generativeai as genai
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            image_parts = [{"mime_type": "image/jpeg", "data": img_bytes}]
+            response = model.generate_content([image_parts, GEMINI_PROMPT])
+            description = response.text.strip()
+            if description and description != "Unknown item":
+                print(f"✅ Gemini identified: {description}")
+                return jsonify({"description": description, "provider": "gemini"})
         except Exception as e:
-            print(f"⚠️ Google Vision failed: {e}")
+            print(f"⚠️ Gemini failed: {e}")
     
     # Fallback to Cloudflare Workers AI
     if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
@@ -1608,7 +1614,7 @@ def api_identify():
             payload = {
                 "messages": [{
                     "role": "user",
-                    "content": f"Image: data:image/jpeg;base64,{b64_image}\n\nIdentify this product. Return ONLY the product name and brand if visible. Example: 'Nintendo Switch OLED'. If unclear, say 'Unknown item'."
+                    "content": f"Image: data:image/jpeg;base64,{b64_image}\n\n{GEMINI_PROMPT}"
                 }]
             }
             
@@ -1616,7 +1622,7 @@ def api_identify():
             if resp.ok:
                 result = resp.json()
                 description = result.get('result', {}).get('response', '').strip()
-                if description:
+                if description and description != "Unknown item":
                     print(f"✅ Cloudflare AI identified: {description}")
                     return jsonify({"description": description, "provider": "cloudflare"})
         except Exception as e:
@@ -1624,7 +1630,7 @@ def api_identify():
     
     # No AI available - return empty description for manual input
     print("⚠️ No AI services available for image identification")
-    return jsonify({"description": "", "error": "AI services unavailable", "fallback": "manual"}), 200
+    return jsonify({"description": "", "error": "AI analysis failed. Please describe manually."}), 200
 
 
 
