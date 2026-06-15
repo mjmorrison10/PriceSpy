@@ -497,6 +497,8 @@ function buildDirection(res, d) {
   var isSynthetic = d.is_synthetic;
   var confidence = d.confidence || 'low';
   var realCount = d.real_items_count || 0;
+  var confLabel = d.confidence_label || '';
+  var marketNote = d.market_note || '';
   var dr = EL('div', '', res);
   dr.style.marginBottom = '12px';
   
@@ -504,21 +506,11 @@ function buildDirection(res, d) {
   var bdg = EL('span', 'bdg ' + (dir === 'rising' ? 'ri' : (dir === 'falling' ? 'fa' : 'st')), dr);
   bdg.textContent = (dir === 'rising' ? '📈 Rising' : (dir === 'falling' ? '📉 Falling' : '📊 Stable'));
   
-  // Data source badge
-  var srcBdg = EL('span', 'bdg ' + (isSynthetic ? 'st' : 'ri'), dr);
-  srcBdg.style.marginLeft = '6px';
-  if (isSynthetic) {
-    srcBdg.textContent = '🧮 Smart Estimate';
-  } else {
-    srcBdg.textContent = '📊 Real eBay Data (' + realCount + ' items)';
-  }
-  
-  // Confidence indicator
+  // Data source badge with confidence color
   var confColors = {high: 'ri', medium: 'st', low: 'fa'};
-  var confLabels = {high: 'High Confidence', medium: 'Medium Confidence', low: 'Low Confidence'};
-  var confBdg = EL('span', 'bdg ' + confColors[confidence], dr);
-  confBdg.style.marginLeft = '6px';
-  confBdg.textContent = confLabels[confidence];
+  var srcBdg = EL('span', 'bdg ' + confColors[confidence], dr);
+  srcBdg.style.marginLeft = '6px';
+  srcBdg.textContent = d.data_source || 'Unknown Source';
   
   // Verification link
   if (d.ebay_url) {
@@ -530,53 +522,72 @@ function buildDirection(res, d) {
     verifyLink.textContent = 'Verify on eBay →';
   }
   
-  // Warning for synthetic data
-  if (isSynthetic) {
-    var warn = EL('div', '', dr);
-    warn.style.cssText = 'font-size:.65rem;color:var(--am);margin-top:6px;padding:4px 8px;background:rgba(251,191,36,.1);border-radius:6px';
-    warn.textContent = '⚠️ Prices are estimates based on market baselines, not actual sold listings. Click "Verify on eBay" to check real prices.';
+  // Confidence label
+  if (confLabel) {
+    var confSpan = EL('span', '', dr);
+    confSpan.style.cssText = 'font-size:.65rem;color:var(--t2);margin-left:6px';
+    confSpan.textContent = confLabel;
+  }
+  
+  // Market note (AI reasoning, etc.)
+  if (marketNote) {
+    var noteDiv = EL('div', '', dr);
+    noteDiv.style.cssText = 'font-size:.65rem;color:var(--am);margin-top:6px;padding:4px 8px;background:rgba(251,191,36,.1);border-radius:6px';
+    noteDiv.textContent = marketNote;
   }
 }
 
 function buildVerification(res, d) {
   // Show sample sold items for verification
   var recentSold = d.recent_sold || [];
-  if (recentSold.length === 0) return;
   
   var vc = EL('div', 'cd', res);
-  EL('h3', '', vc).textContent = '🔍 Verify This Data';
+  EL('h3', '', vc).textContent = '🔍 Verify Prices';
   
   var sub = EL('div', 'sb', vc);
   sub.textContent = d.is_synthetic ? 
-    'Sample items (synthetic estimate):' : 
+    'Sample items (synthetic estimate) - verify with links below:' : 
     'Recent sold items used for this analysis:';
   
-  var list = EL('div', '', vc);
-  var sampleItems = recentSold.slice(0, 5);
-  sampleItems.forEach(function(item) {
-    var itemRow = EL('div', 'lr', list);
-    
-    var info = EL('div', 'it', itemRow);
-    var title = item.title || 'Unknown item';
-    info.textContent = title.substring(0, 50) + (title.length > 50 ? '...' : '');
-    
-    var price = EL('div', 'ip', itemRow);
-    price.textContent = item.price ? '$' + item.price.toFixed(2) : '';
-    
-    var cond = EL('span', 'ic', itemRow);
-    cond.textContent = item.condition || '';
-    
-    var date = EL('div', 'id', itemRow);
-    date.textContent = item.sold_date || '';
-  });
+  // Verification links
+  var q = encodeURIComponent(d.query);
+  var links = [
+    {name: 'eBay Sold', url: `https://www.ebay.com/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1`, icon: '🔗'},
+    {name: 'Swappa', url: `https://swappa.com/search?search_term=${q}`, icon: '📱'},
+    {name: 'Back Market', url: `https://www.backmarket.com/search?search=${q}`, icon: '♻️'},
+    {name: 'Facebook', url: `https://www.facebook.com/marketplace/search?keywords=${q}`, icon: '📘'},
+  ];
   
-  if (d.ebay_url) {
-    var verifyBtn = EL('a', 'bt bt-p', vc);
-    verifyBtn.href = d.ebay_url;
-    verifyBtn.target = '_blank';
-    verifyBtn.rel = 'noopener noreferrer';
-    verifyBtn.style.cssText = 'display:inline-block;margin-top:10px;text-decoration:none';
-    verifyBtn.textContent = 'View All on eBay →';
+  var linkGrid = EL('div', '', vc);
+  linkGrid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px';
+  for (var i = 0; i < links.length; i++) {
+    var link = links[i];
+    var a = EL('a', 'bt bt-g', linkGrid);
+    a.href = link.url;
+    a.target = '_blank';
+    a.textContent = link.icon + ' ' + link.name;
+    a.style.textDecoration = 'none';
+  }
+  
+  // Sample sold items
+  if (recentSold.length > 0) {
+    var sampleItems = recentSold.slice(0, 5);
+    sampleItems.forEach(function(item) {
+      var itemRow = EL('div', 'lr', vc);
+      
+      var info = EL('div', 'it', itemRow);
+      var title = item.title || 'Unknown item';
+      info.textContent = title.substring(0, 50) + (title.length > 50 ? '...' : '');
+      
+      var price = EL('div', 'ip', itemRow);
+      price.textContent = item.price ? '$' + item.price.toFixed(2) : '';
+      
+      var cond = EL('span', 'ic', itemRow);
+      cond.textContent = item.condition || '';
+      
+      var date = EL('div', 'id', itemRow);
+      date.textContent = item.sold_date || '';
+    });
   }
 }
 

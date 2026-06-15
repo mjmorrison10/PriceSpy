@@ -29,6 +29,17 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "")
 
+# eBay Browse API Configuration
+EBAY_CLIENT_ID = os.environ.get("EBAY_CLIENT_ID", "")
+EBAY_CLIENT_SECRET = os.environ.get("EBAY_CLIENT_SECRET", "")
+EBAY_API_BASE = "https://api.ebay.com"
+EBAY_OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
+
+if EBAY_CLIENT_ID:
+    print("✅ eBay Browse API configured")
+else:
+    print("⚠️ No eBay API credentials - using Smart Estimates (set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET)")
+
 # Configure Gemini if key is available
 if GEMINI_API_KEY:
     try:
@@ -1386,44 +1397,133 @@ def api_search():
         return jsonify({"error": str(e), "query": q}), 500
 
 
+@app.route("/api/status")
+def api_status():
+    """Return API configuration status."""
+    return jsonify({
+        "ebay_configured": bool(EBAY_CLIENT_ID and EBAY_CLIENT_SECRET),
+        "gemini_configured": bool(GEMINI_API_KEY),
+        "pricecharting_status": "scraping_only",
+    })
+
+
 # ═══════════════════════════════════════════
 #  EBAY SOLD DATA SCRAPER
 # ═══════════════════════════════════════════
 
+def _get_ebay_token() -> str | None:
+    """Get OAuth token for eBay Browse API."""
+    if not EBAY_CLIENT_ID or not EBAY_CLIENT_SECRET:
+        return None
+    
+    creds = base64.b64encode(f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}".encode()).decode()
+    
+    try:
+        r = SESSION.post(
+            EBAY_OAUTH_URL,
+            headers={
+                "Authorization": f"Basic {creds}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data="grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope",
+            timeout=15
+        )
+        if r.status_code == 200:
+            return r.json().get("access_token")
+    except Exception as e:
+        print(f"⚠️ eBay OAuth failed: {e}")
+    return None
+
+
 def _scrape_ebay_sold(query: str, condition: str = "all", limit: int = 60) -> list[dict]:
-    """Scrape real sold items from eBay with condition filtering."""
+    """Get real sold items from eBay Browse API."""
+    token = _get_ebay_token()
+    if not token:
+        print("⚠️ No eBay API credentials - using Smart Estimate")
+        return []
+    
     sold_items = []
     
-    base_url = f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(query)}"
-    base_url += "&LH_Sold=1&LH_Complete=1&LH_PrefLoc=1&_sop=12"
+    # Build filter for sold items
+    filter_parts = ["soldItemOnly:true"]
     
-    if condition != "all" and condition in EBAY_COND_MAP:
-        codes, _ = EBAY_COND_MAP[condition]
-        for code in codes[:1]:
-            url = f"{base_url}&LH_ItemCondition={code}"
-            try:
-                items = _parse_ebay_sold_page(url, limit // 2)
-                sold_items.extend(items)
-            except Exception as e:
-                print(f"eBay scrape failed for {condition}: {e}")
+    # Map our conditions to eBay condition IDs
+    cond_map = {
+        "new (sealed)": ["NEW"],
+        "new": ["NEW"],
+        "like new": ["OPEN_BOX", "LIKE_NEW"],
+        "very good": ["VERY_GOOD", "EXCELLENT"],
+        "good": ["GOOD"],
+        "acceptable": ["ACCEPTABLE"],
+        "for parts": ["PARTS_ONLY", "FOR_PARTS"],
+    }
     
-    if len(sold_items) < 5:
-        try:
-            all_items = _parse_ebay_sold_page(base_url, limit)
-            seen = {(it['title'], it['price']) for it in sold_items}
-            for it in all_items:
-                key = (it['title'], it['price'])
-                if key not in seen:
-                    seen.add(key)
-                    sold_items.append(it)
-        except Exception:
-            pass
+    if condition != "all" and condition in cond_map:
+        cond_ids = ",".join(cond_map[condition])
+        filter_parts.append(f"conditionIds:{{{cond_ids}}}")
     
-    return sold_items[:limit]
+    filters = ",".join(filter_parts)
+    
+    # eBay Browse API endpoint
+    url = f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search"
+    params = {
+        "q": query,
+        "filter": filters,
+        "limit": str(min(limit, 50)),
+        "sort": "sellingStatus[0].price desc",
+    }
+    
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        r = SESSION.get(url, params=params, headers=headers, timeout=20)
+        
+        if r.status_code == 401:
+            print("⚠️ eBay API auth expired")
+            return []
+        elif r.status_code != 200:
+            print(f"eBay API error: {r.status_code} - {r.text[:200]}")
+            return []
+        
+        data = r.json()
+        items = data.get("itemSummaries", [])
+        
+        for item in items:
+            price_info = item.get("price", {})
+            price = float(price_info.get("value", 0))
+            
+            if price <= 0:
+                continue
+            
+            # Map eBay condition to our format
+            ebay_cond = item.get("condition", "")
+            our_cond = "good"
+            for k, v in cond_map.items():
+                if ebay_cond in v:
+                    our_cond = k
+                    break
+            
+            # Get item end date for sold date
+            item_end = item.get("itemEndDate", "")
+            sold_date = item_end[:10] if item_end else None
+            
+            sold_items.append({
+                "title": item.get("title", ""),
+                "price": price,
+                "sold_date": sold_date,
+                "url": item.get("itemWebUrl", ""),
+                "condition": our_cond,
+            })
+        
+        print(f"✅ eBay API returned {len(sold_items)} sold items")
+        
+    except Exception as e:
+        print(f"⚠️ eBay API failed: {e}")
+    
+    return sold_items
 
 
 def _parse_ebay_sold_page(url: str, limit: int) -> list[dict]:
-    """Parse eBay sold results page."""
+    """Parse eBay sold results page (fallback for when API is unavailable)."""
     try:
         r = SESSION.get(url, timeout=15)
         if r.status_code != 200:
@@ -1474,6 +1574,144 @@ def _parse_ebay_sold_page(url: str, limit: int) -> list[dict]:
     return items
 
 
+def _get_ai_market_value(query: str, condition: str) -> dict | None:
+    """Query Gemini for estimated market value."""
+    if not GEMINI_API_KEY:
+        return None
+    
+    prompt = f"""You are a market research expert. Provide current resale value estimates for:
+    
+Item: {query}
+Condition: {condition}
+
+Return ONLY a JSON object with this exact format (no other text):
+{{"low": number, "median": number, "high": number, "currency": "USD", "reasoning": "brief note"}}
+
+Guidelines:
+- low: Bottom of typical range (worst condition, highest fees, etc.)
+- median: Most common selling price
+- high: Top of typical range (best condition, unlocked, etc.)
+- Base on recent sold listings on eBay, Swappa, Back Market
+- If you cannot determine, return null values"""
+
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        
+        import json
+        import re
+        match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+            return {
+                "low": data.get("low", 0),
+                "median": data.get("median", 0),
+                "high": data.get("high", 0),
+                "reasoning": data.get("reasoning", "")
+            }
+    except Exception as e:
+        print(f"⚠️ AI estimation failed: {e}")
+    
+    return None
+
+
+def _get_market_value(query: str, condition: str = "all") -> dict:
+    """
+    Get market value using tiered approach:
+    1. eBay Browse API (if configured)
+    2. AI estimation (Gemini)
+    3. Category baselines (fallback)
+    
+    Returns: {low, median, high, source, confidence, items, sold_count, note}
+    """
+    result = {
+        "low": 0, "median": 0, "high": 0,
+        "p10": 0, "p90": 0, "mean": 0,
+        "source": "none", "confidence": "none",
+        "items": [], "sold_count": 0, "note": ""
+    }
+    
+    # TIER 1: Try eBay API (highest priority)
+    if EBAY_CLIENT_ID and EBAY_CLIENT_SECRET:
+        items = _scrape_ebay_sold(query, condition, limit=60)
+        if len(items) >= 5:
+            stats = _compute_stats(items)
+            return {
+                **stats,
+                "source": f"eBay Sold Data ({len(items)} items)",
+                "confidence": "high",
+                "items": items[:10],
+                "sold_count": len(items),
+                "note": "Real sold prices from eBay"
+            }
+    
+    # TIER 2: Use AI estimation (Gemini) - if available and no eBay data
+    if GEMINI_API_KEY and result["confidence"] != "high":
+        ai_result = _get_ai_market_value(query, condition)
+        if ai_result and ai_result.get("median"):
+            # Generate synthetic items for display
+            import random
+            random.seed(abs(hash(query)) % 2**32)
+            base = ai_result["median"]
+            synthetic_items = []
+            for i in range(5):
+                synthetic_items.append({
+                    "title": f"{query} - Estimated",
+                    "price": round(base * (0.85 + random.random() * 0.3), 2),
+                    "sold_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(query)}&LH_Sold=1",
+                    "condition": condition,
+                })
+            return {
+                "low": ai_result["low"],
+                "p10": round(ai_result["low"] * 1.05, 2),
+                "median": ai_result["median"],
+                "p90": round(ai_result["high"] * 0.95, 2),
+                "high": ai_result["high"],
+                "mean": (ai_result["low"] + ai_result["median"] + ai_result["high"]) / 3,
+                "source": "AI Estimation (Gemini)",
+                "confidence": "medium",
+                "items": synthetic_items,
+                "sold_count": 0,
+                "note": f"AI estimate: {ai_result.get('reasoning', 'Based on public market data')}"
+            }
+    
+    # TIER 3: Category baseline (lowest priority)
+    cat, cat_lo, cat_med, cat_hi = _guess_category(query)
+    cond_system = _get_condition_system(cat)
+    cond_mult = cond_system["multipliers"].get(condition, 0.7)
+    
+    # Generate synthetic data with WIDE range for low confidence
+    base = cat_med * cond_mult
+    
+    # Generate synthetic items for display
+    import random
+    random.seed(abs(hash(query)) % 2**32)
+    synthetic_items = []
+    for i in range(5):
+        synthetic_items.append({
+            "title": f"{query} - {condition}",
+            "price": round(base * (0.75 + random.random() * 0.5), 2),
+            "sold_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(query)}&LH_Sold=1",
+            "condition": condition,
+        })
+    
+    return {
+        "low": round(base * 0.75, 2),
+        "p10": round(base * 0.80, 2),
+        "median": round(base, 2),
+        "p90": round(base * 1.20, 2),
+        "high": round(base * 1.25, 2),
+        "mean": round(base, 2),
+        "source": f"Category Estimate ({cat})",
+        "confidence": "low",
+        "items": synthetic_items,
+        "sold_count": 0,
+        "note": "No real sales data. Use verification links below."
+    }
+
+
 def _do_search(q: str, period_days: int, period: str,
                filter_condition: str, buy_price: float,
                platform: str = "ebay", shipping_cost: float = 0.0) -> dict:
@@ -1492,23 +1730,17 @@ def _do_search(q: str, period_days: int, period: str,
     cond_mult = cond_system["multipliers"]
     cond_labels = cond_system["labels"]
 
-    data_source = f"Smart Estimate ({cat})"
-    real_sold = []
-
-    # ── Try to get REAL eBay sold data ──
-    if not is_vehicle:
-        try:
-            real_sold = _scrape_ebay_sold(q, filter_condition, limit=60)
-            print(f"📊 Scraped {len(real_sold)} real sold items from eBay")
-        except Exception as e:
-            print(f"⚠️ eBay scrape failed: {e}")
-
-    if len(real_sold) >= 5:
-        sold_items = real_sold
-        data_source = f"eBay Sold Data ({len(real_sold)} items)"
-        # Generate active listings based on real sold data
+    # ── Use tiered market value lookup ──
+    market_data = _get_market_value(q, filter_condition if filter_condition and filter_condition != "all" else "very good")
+    sold_items = market_data.get("items", [])
+    data_source = market_data.get("source", f"Smart Estimate ({cat})")
+    confidence = market_data.get("confidence", "low")
+    market_note = market_data.get("note", "")
+    
+    # Generate active listings based on market data
+    if sold_items:
         sold_stats = _compute_stats(sold_items)
-        base_active = sold_stats.get("median", 50) * 1.06
+        base_active = sold_stats.get("median", cat_med) * 1.06
         import random
         random.seed(42)
         for i in range(20):
@@ -1521,9 +1753,7 @@ def _do_search(q: str, period_days: int, period: str,
                 "url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}",
                 "condition": cond,
             })
-
-    # ── Vehicle path ──
-    if is_vehicle:
+    elif is_vehicle:
         vi = _get_vehicle_info(q)
         data_source = f"Vehicle Estimate — {vi['make_model']} ({vi['year']})"
         base_val = vi["estimated_value"]
@@ -1664,10 +1894,16 @@ def _do_search(q: str, period_days: int, period: str,
         "recent_sold": recent_sold,
         "active_listings": active_filtered[:20],
         "data_source": data_source,
-        "is_real_data": len(real_sold) >= 5,
-        "is_synthetic": len(real_sold) < 5 and not is_vehicle,
-        "real_items_count": len(real_sold),
-        "confidence": "high" if len(real_sold) >= 30 else ("medium" if len(real_sold) >= 5 else "low"),
+        "is_real_data": confidence == "high",
+        "is_synthetic": confidence != "high" and not is_vehicle,
+        "real_items_count": market_data.get("sold_count", 0),
+        "confidence": confidence,
+        "confidence_label": {
+            "high": "✅ High confidence - Real sales data",
+            "medium": "⚠️ Medium confidence - AI estimation",
+            "low": "❌ Low confidence - Historical estimate"
+        }.get(confidence, ""),
+        "market_note": market_note,
         "flip_analysis": flip,
         "ebay_url": (
             f"https://www.ebay.com/sch/i.html"
@@ -1681,6 +1917,8 @@ def _do_search(q: str, period_days: int, period: str,
         "is_vehicle": is_vehicle,
         "saturation": flip.get("saturation"),
         "opportunity": flip.get("opportunity"),
+        "api_missing": not (EBAY_CLIENT_ID and EBAY_CLIENT_SECRET),
+        "setup_instructions": "To get real eBay prices: https://developer.ebay.com/signin → Create App → Set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET env vars",
     }
 
     if is_vehicle:
