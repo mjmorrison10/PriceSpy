@@ -2211,6 +2211,35 @@ init_db()
 register_routes(app, _do_search)
 
 # ═══════════════════════════════════════════
+#  EBAY MARKETPLACE ACCOUNT DELETION NOTIFICATION
+# ═══════════════════════════════════════════
+
+EBAY_VERIFICATION_TOKEN = os.environ.get("EBAY_VERIFICATION_TOKEN", "pricespy-ebay-notification-token-2024")
+
+@app.route("/ebay/account-deletion", methods=["POST"])
+def ebay_account_deletion():
+    """Handle eBay marketplace account deletion notifications."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        print(f"📬 eBay account deletion notification: {data}")
+    except Exception:
+        pass
+    
+    return jsonify({
+        "status": "received",
+        "message": "Acknowledged - no user data to delete"
+    }), 200
+
+@app.route("/ebay/account-deletion", methods=["GET"])
+def ebay_account_deletion_verification():
+    """Verification endpoint for eBay to validate the webhook."""
+    challenge_code = request.args.get("challenge_code", "")
+    if challenge_code:
+        print(f"🔐 eBay verification challenge: {challenge_code}")
+        return jsonify({"challengeResponse": challenge_code}), 200
+    return jsonify({"status": "ok"}), 200
+
+# ═══════════════════════════════════════════
 #  PHOTO GALLERY — scrape eBay listing images
 # ═══════════════════════════════════════════
 
