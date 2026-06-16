@@ -2240,19 +2240,12 @@ def ebay_account_deletion_verification():
     """
     Verification endpoint for eBay to validate the webhook.
     eBay sends GET with challenge_code and expects it returned in body.
-    They also send X-Ebay-Verification-Token header with the token we configured.
+    They do NOT send the token during validation - only during actual notifications.
     """
-    # eBay sends the verification token we provided in their portal
-    incoming_token = request.headers.get("X-Ebay-Verification-Token", "")
-    
     # Log for debugging
     challenge_code = request.args.get("challenge_code", "")
-    print(f"🔐 eBay verification - received token: {incoming_token[:20] if incoming_token else 'none'}..., expected: {EBAY_VERIFICATION_TOKEN[:20]}..., challenge: {challenge_code}")
-    
-    # Validate the token matches what we configured
-    if incoming_token != EBAY_VERIFICATION_TOKEN:
-        print(f"❌ Token mismatch! Received: {incoming_token}, Expected: {EBAY_VERIFICATION_TOKEN}")
-        return jsonify({"error": "Invalid verification token"}), 403
+    incoming_token = request.headers.get("X-Ebay-Verification-Token", "")
+    print(f"🔐 eBay verification - challenge: {challenge_code}, has_token: {bool(incoming_token)}")
     
     # Return the challenge code in the body (required by eBay)
     if challenge_code:
