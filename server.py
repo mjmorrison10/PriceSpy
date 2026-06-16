@@ -2242,7 +2242,7 @@ def ebay_account_deletion_verification():
     print(f"🔐 eBay verification - challenge: {challenge_code}")
     
     # Return plain text - just the challenge code itself
-    return challenge_code, 200, {"Content-Type": "text/plain"}
+    return challenge_code, 200, [("Content-Type", "text/plain")]
 
 # ═══════════════════════════════════════════
 #  PHOTO GALLERY — scrape eBay listing images
