@@ -2242,12 +2242,9 @@ def ebay_account_deletion_verification():
     print(f"🔐 eBay verification - challenge: {challenge_code}")
     
     if challenge_code:
-        # Return plain text as eBay may expect
-        return app.response_class(
-            response=challenge_code,
-            status=200,
-            mimetype='text/plain'
-        )
+        response = jsonify({"challengeResponse": challenge_code})
+        response.headers["X-Ebay-Verification-Challenge"] = challenge_code
+        return response, 200
     
     return jsonify({"status": "ok"}), 200
 
