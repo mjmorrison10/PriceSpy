@@ -55,6 +55,11 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 UPLOAD_FOLDER = Path(__file__).parent / "uploads"
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 
+# Health check endpoint for Render
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"}), 200
+
 PRICE_CACHE: dict[str, dict] = {}
 
 SESSION = requests.Session()
