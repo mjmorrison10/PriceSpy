@@ -2237,17 +2237,10 @@ def ebay_account_deletion():
 
 @app.route("/ebay/account-deletion", methods=["GET"])
 def ebay_account_deletion_verification():
-    """
-    Verification endpoint for eBay to validate the webhook.
-    eBay sends GET with challenge_code and expects it returned in body.
-    They do NOT send the token during validation - only during actual notifications.
-    """
-    # Log for debugging
+    """Verification endpoint for eBay to validate the webhook."""
     challenge_code = request.args.get("challenge_code", "")
-    incoming_token = request.headers.get("X-Ebay-Verification-Token", "")
-    print(f"🔐 eBay verification - challenge: {challenge_code}, has_token: {bool(incoming_token)}")
+    print(f"🔐 eBay verification - challenge: {challenge_code}")
     
-    # Return the challenge code in the body (required by eBay)
     if challenge_code:
         return jsonify({"challengeResponse": challenge_code}), 200
     
