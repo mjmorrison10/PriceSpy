@@ -2247,11 +2247,13 @@ def ebay_account_deletion_verification():
     
     # Log for debugging
     challenge_code = request.args.get("challenge_code", "")
-    print(f"🔐 eBay verification - token: {incoming_token[:20]}..., challenge: {challenge_code}")
+    print(f"🔐 eBay verification - token: {incoming_token[:20] if incoming_token else 'none'}..., challenge: {challenge_code}")
     
     # Return the challenge code in the body (required by eBay)
     if challenge_code:
-        return jsonify({"challengeResponse": challenge_code}), 200
+        response = jsonify({"challengeResponse": challenge_code})
+        response.headers["Content-Type"] = "application/json"
+        return response, 200
     
     return jsonify({"status": "ok"}), 200
 
