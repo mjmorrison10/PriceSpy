@@ -2241,12 +2241,8 @@ def ebay_account_deletion_verification():
     challenge_code = request.args.get("challenge_code", "")
     print(f"🔐 eBay verification - challenge: {challenge_code}")
     
-    if challenge_code:
-        response = jsonify({"challengeResponse": challenge_code})
-        response.headers["X-Ebay-Verification-Challenge"] = challenge_code
-        return response, 200
-    
-    return jsonify({"status": "ok"}), 200
+    # Return plain text - just the challenge code itself
+    return challenge_code, 200, {"Content-Type": "text/plain"}
 
 # ═══════════════════════════════════════════
 #  PHOTO GALLERY — scrape eBay listing images
