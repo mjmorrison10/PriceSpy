@@ -2235,7 +2235,7 @@ def ebay_account_deletion():
         "message": "Acknowledged - no user data to delete"
     }), 200
 
-@app.route("/ebay/account-deletion", methods=["GET"])
+@app.route("/ebay/account-deletion", methods=["GET", "HEAD", "OPTIONS"])
 def ebay_account_deletion_verification():
     """Verification endpoint for eBay to validate the webhook."""
     challenge_code = request.args.get("challenge_code", "")
