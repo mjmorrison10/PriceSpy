@@ -2239,10 +2239,21 @@ def ebay_account_deletion():
 def ebay_account_deletion_verification():
     """Verification endpoint for eBay to validate the webhook."""
     challenge_code = request.args.get("challenge_code", "")
+    verification_token = os.environ.get("EBAY_VERIFICATION_TOKEN", "")
+    endpoint_url = "https://pricespy-yx00.onrender.com/ebay/account-deletion"
+    
     print(f"🔐 eBay verification - challenge: {challenge_code}")
     
-    # Return plain text - just the challenge code itself
-    return challenge_code, 200, [("Content-Type", "text/plain")]
+    if challenge_code and verification_token:
+        # Compute SHA-256 hash of: challengeCode + verificationToken + endpoint
+        import hashlib
+        hash_input = challenge_code + verification_token + endpoint_url
+        challenge_response = hashlib.sha256(hash_input.encode()).hexdigest()
+        print(f"🔐 Computed challengeResponse: {challenge_response}")
+        
+        return jsonify({"challengeResponse": challenge_response}), 200
+    
+    return jsonify({"challengeResponse": ""}), 200
 
 # ═══════════════════════════════════════════
 #  PHOTO GALLERY — scrape eBay listing images
