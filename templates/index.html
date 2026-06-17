@@ -3,7 +3,18 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PriceSpy</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+<!-- PWA Meta Tags -->
+<meta name="theme-color" content="#5b8def">
+<meta name="description" content="Real-time eBay price research tool for resellers and flippers">
+<link rel="manifest" href="/static/manifest.json">
+<!-- iOS PWA Support -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PriceSpy">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<!-- Favicon -->
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="shortcut icon" type="image/svg+xml" href="/static/logo.svg">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -63,7 +74,8 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <body>
 
 <header>
-<span style="font-size:1.5rem">🔎</span><span class="logo">PriceSpy</span>
+<img src="/static/logo.svg" alt="PriceSpy" style="height:28px;width:28px;flex-shrink:0">
+<span class="logo">PriceSpy</span>
 <div class="hr">
 <button class="pil ac" data-pg="search">🔍</button>
 <button class="pil" data-pg="quick">⚡</button>
@@ -1255,6 +1267,19 @@ async function lookupBarcode(code) {
 
 console.log('PriceSpy v17 ready — pure DOM, no Jinja2, no paren bugs');
 setTimeout(function() { search(); }, 600);
+
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/static/sw.js')
+      .then(function(registration) {
+        console.log('ServiceWorker registered:', registration.scope);
+      })
+      .catch(function(err) {
+        console.log('ServiceWorker registration failed:', err);
+      });
+  });
+}
 </script>
 <!-- Barcode Scan Overlay -->
 <div class="ov" id="scanOv"><div class="ovc"><h3>📷 Scan Barcode</h3>
