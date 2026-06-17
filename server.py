@@ -60,6 +60,16 @@ UPLOAD_FOLDER.mkdir(exist_ok=True)
 def health():
     return jsonify({"status": "ok"}), 200
 
+# Policy page route
+@app.route("/policy")
+def policy():
+    return render_template("policy.html")
+
+# User-facing account deletion request page
+@app.route("/account-deletion")
+def account_deletion_page():
+    return render_template("policy.html", section="account-deletion")
+
 PRICE_CACHE: dict[str, dict] = {}
 
 SESSION = requests.Session()
