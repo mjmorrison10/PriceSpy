@@ -164,60 +164,61 @@ def _get_condition_system(category: str) -> dict:
 # Format: key → (low_used, median_used, high_new, category)
 # Now with separate used/new ranges for accuracy
 CATEGORY_KB = {
-    # iPhones — accurate used + new pricing
-    "iphone 13 pro": (280, 340, 700, "Smartphones"),
-    "iphone 13": (180, 250, 550, "Smartphones"),
-    "iphone 13 pro max": (350, 420, 800, "Smartphones"),
-    "iphone 14 pro": (380, 480, 900, "Smartphones"),
-    "iphone 14": (250, 330, 650, "Smartphones"),
+    # iPhones — longer keys BEFORE shorter (substring matching)
     "iphone 14 pro max": (450, 550, 1000, "Smartphones"),
-    "iphone 15 pro": (500, 620, 1100, "Smartphones"),
-    "iphone 15": (350, 450, 800, "Smartphones"),
     "iphone 15 pro max": (600, 750, 1200, "Smartphones"),
+    "iphone 13 pro max": (350, 420, 800, "Smartphones"),
+    "iphone 12 pro max": (300, 380, 750, "Smartphones"),
+    "iphone 14 pro": (380, 480, 900, "Smartphones"),
+    "iphone 13 pro": (280, 340, 700, "Smartphones"),
+    "iphone 15 pro": (500, 620, 1100, "Smartphones"),
     "iphone 12 pro": (200, 280, 600, "Smartphones"),
+    "iphone 15": (350, 450, 800, "Smartphones"),
+    "iphone 14": (250, 330, 650, "Smartphones"),
+    "iphone 13": (180, 250, 550, "Smartphones"),
     "iphone 12": (150, 220, 500, "Smartphones"),
     "iphone 11": (120, 180, 400, "Smartphones"),
     "iphone xr": (100, 150, 300, "Smartphones"),
     "iphone se": (80, 140, 350, "Smartphones"),
     # Samsung
-    "samsung galaxy s23": (300, 420, 800, "Smartphones"),
     "samsung galaxy s24": (450, 580, 1000, "Smartphones"),
+    "samsung galaxy s23": (300, 420, 800, "Smartphones"),
     "samsung galaxy": (100, 250, 800, "Smartphones"),
     # Other phones
-    "pixel 7": (200, 300, 600, "Smartphones"),
     "pixel 8": (300, 420, 700, "Smartphones"),
+    "pixel 7": (200, 300, 600, "Smartphones"),
     "pixel": (80, 180, 700, "Smartphones"),
     # Laptops
-    "macbook air m1": (350, 480, 900, "Laptops"),
     "macbook air m2": (500, 650, 1100, "Laptops"),
+    "macbook air m1": (350, 480, 900, "Laptops"),
     "macbook pro": (500, 850, 2500, "Laptops"),
     "macbook": (300, 600, 2500, "Laptops"),
     "thinkpad": (100, 250, 1500, "Laptops"),
     # Consoles
-    "nintendo switch": (120, 200, 350, "Gaming Consoles"),
     "playstation 5": (250, 350, 500, "Gaming Consoles"),
     "playstation 4": (100, 170, 300, "Gaming Consoles"),
+    "nintendo switch": (120, 200, 350, "Gaming Consoles"),
     "xbox series x": (250, 330, 500, "Gaming Consoles"),
     "xbox series s": (120, 190, 300, "Gaming Consoles"),
     # Games / cards
     "pokemon": (5, 50, 300, "Trading Cards / Games"),
     # Sneakers
-    "nike air force": (40, 80, 160, "Sneakers / Fashion"),
-    "nike dunk": (50, 120, 250, "Sneakers / Fashion"),
     "nike air jordan": (80, 180, 500, "Sneakers / Fashion"),
-    "nike": (20, 60, 200, "Sneakers / Fashion"),
+    "nike dunk": (50, 120, 250, "Sneakers / Fashion"),
+    "nike air force": (40, 80, 160, "Sneakers / Fashion"),
     "jordan": (50, 120, 300, "Sneakers / Fashion"),
+    "nike": (20, 60, 200, "Sneakers / Fashion"),
     # Other
-    "lego": (10, 60, 800, "Toys / Building Sets"),
-    "dyson": (50, 180, 500, "Home Appliances"),
-    "bose": (40, 150, 400, "Audio"),
-    "sony headphones": (30, 100, 350, "Audio"),
-    "sony": (30, 150, 2000, "Electronics"),
-    "canon": (50, 300, 2000, "Cameras"),
+    "canon r5": (1500, 2500, 3900, "Cameras"),
+    "canon 5d": (300, 800, 3000, "Cameras"),
     "canon eos": (150, 500, 2500, "Cameras"),
     "canon rebel": (100, 350, 1200, "Cameras"),
-    "canon 5d": (300, 800, 3000, "Cameras"),
-    "canon r5": (1500, 2500, 3900, "Cameras"),
+    "canon": (50, 300, 2000, "Cameras"),
+    "sony headphones": (30, 100, 350, "Audio"),
+    "sony": (30, 150, 2000, "Electronics"),
+    "dyson": (50, 180, 500, "Home Appliances"),
+    "bose": (40, 150, 400, "Audio"),
+    "lego": (10, 60, 800, "Toys / Building Sets"),
     "canon r6": (1200, 1800, 2500, "Cameras"),
     "nikon d850": (800, 1400, 3000, "Cameras"),
     "nikon d750": (500, 900, 2000, "Cameras"),
@@ -1853,8 +1854,9 @@ def _do_search(q: str, period_days: int, period: str,
 
     # ── Use tiered market value lookup ──
     market_data = _get_market_value(q, filter_condition if filter_condition and filter_condition != "all" else "very good")
-    sold_items = [it for it in market_data.get("items", []) if it.get("price") is not None]
-    real_active_items = [it for it in market_data.get("active_items", []) if it.get("price") is not None]
+    # Filter out any items with None or invalid prices
+    sold_items = [it for it in market_data.get("items", []) if it and it.get("price") is not None and isinstance(it.get("price"), (int, float))]
+    real_active_items = [it for it in market_data.get("active_items", []) if it and it.get("price") is not None and isinstance(it.get("price"), (int, float))]
     data_source = market_data.get("source", f"Smart Estimate ({cat})")
     confidence = market_data.get("confidence", "low")
     market_note = market_data.get("note", "")
