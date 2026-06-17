@@ -867,7 +867,7 @@ def _generate_trend(base_price: float, count: int, sold_items: list = None,
                     continue
                 if wd < cutoff:
                     continue
-                prices = [p for p in weeks[week] if p > 0.01]
+                prices = [p for p in weeks[week] if p and p > 0.01]
                 if not prices:
                     continue
                 prices.sort()
@@ -1853,8 +1853,8 @@ def _do_search(q: str, period_days: int, period: str,
 
     # ── Use tiered market value lookup ──
     market_data = _get_market_value(q, filter_condition if filter_condition and filter_condition != "all" else "very good")
-    sold_items = market_data.get("items", [])
-    real_active_items = market_data.get("active_items", [])
+    sold_items = [it for it in market_data.get("items", []) if it.get("price") is not None]
+    real_active_items = [it for it in market_data.get("active_items", []) if it.get("price") is not None]
     data_source = market_data.get("source", f"Smart Estimate ({cat})")
     confidence = market_data.get("confidence", "low")
     market_note = market_data.get("note", "")
