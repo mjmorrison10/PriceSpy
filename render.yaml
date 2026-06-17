@@ -10,3 +10,4 @@ services:
       - key: PYTHON_VERSION
         value: 3.13.0
 # Trigger redeploy Wed Jun 17 00:59:00 UTC 2026
+# Force redeploy Wed Jun 17 20:59:57 UTC 2026
