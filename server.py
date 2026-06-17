@@ -1027,6 +1027,63 @@ def api_promoted_impact():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+PROMOTED_VELOCITY_MULTIPLIERS = {
+    0: 1.0, 2: 1.15, 5: 1.35, 10: 1.60, 15: 1.80,
+}
+
+@app.route("/api/promoted-optimize")
+def api_promoted_optimize():
+    """Recommend the optimal Promoted Listings ad rate based on expected daily profit."""
+    q = request.args.get("q", "").strip()
+    buy_price = float(request.args.get("buy_price", "0") or 0)
+    store_tier = request.args.get("store_tier", "none").strip().lower()
+    if store_tier not in EBAY_STORE_TIERS:
+        store_tier = "none"
+    shipping_cost = float(request.args.get("shipping", "0") or 0)
+    category_id = request.args.get("ebay_category_id", "").strip()
+    if not q or buy_price <= 0:
+        return jsonify({"error": "Query and buy price required"}), 400
+    try:
+        r = _do_search(q, 180, "6m", "all", buy_price, store_tier, shipping_cost, 0, category_id)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    sold_median = r["sold_summary"].get("median", 0)
+    if sold_median <= 0:
+        return jsonify({"error": "No sold data to estimate market price"}), 400
+    category = r.get("category", "default")
+    base_velocity = r["flip_analysis"].get("velocity_per_day", 0) or 0.01
+    results = []
+    best = None
+    for rate, mult in PROMOTED_VELOCITY_MULTIPLIERS.items():
+        fc = _calculate_net_profit(sold_median, buy_price, shipping_cost, category, store_tier, rate)
+        expected_daily = fc["net_profit"] * base_velocity * mult
+        velocity = max(base_velocity * mult, 0.001)
+        entry = {
+            "rate": rate,
+            "net_profit": round(fc["net_profit"], 2),
+            "net_margin": round(fc["net_margin_pct"], 1),
+            "promoted_fee": round(fc["promoted_fee"], 2),
+            "velocity_multiplier": mult,
+            "expected_daily_profit": round(expected_daily, 2),
+            "days_to_sell_estimate": round(1 / velocity, 1),
+        }
+        results.append(entry)
+        if best is None or expected_daily > best["expected_daily_profit"]:
+            best = entry
+    reason = "Maximizes expected daily profit by balancing ad cost with faster sell-through."
+    if best and best["rate"] == 0:
+        reason = "No ad spend is optimal because the margin is too thin for promoted listings to pay off."
+    return jsonify({
+        "query": q,
+        "market_median": round(sold_median, 2),
+        "buy_price": round(buy_price, 2),
+        "category": category,
+        "base_velocity_per_day": round(base_velocity, 2),
+        "recommendation": {**best, "reason": reason} if best else None,
+        "scenarios": results,
+    })
+
 @app.route("/api/quick-deal")
 def api_quick_deal():
     raw = request.args.get("input", "").strip()

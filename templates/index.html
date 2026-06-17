@@ -84,6 +84,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <button class="pil" data-pg="dash">📈</button>
 <button class="pil" data-pg="hot">🔥</button>
 <button class="pil" data-pg="roi">💵</button>
+<button class="pil" data-pg="promoted">📢</button>
 <button class="pil" id="navAuth">👤</button>
 <a href="/policy" class="pil" style="margin-left:4px">📜</a>
 <button class="pil" id="navTheme">🌙</button>
@@ -161,6 +162,12 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="rw mb1"><input type="number" id="roiRate" placeholder="Hourly rate" value="35" step="0.01" style="flex:1"><input type="number" id="roiTax" placeholder="Tax rate %" value="25" step="0.01" style="flex:1"></div>
 <div class="rw mb1"><button class="bt bt-p" id="roiCalc" style="flex:1">Calculate True Profit</button></div>
 <div id="roiRes" class="mt1"></div></div></div>
+
+<!-- PROMOTED OPTIMIZER -->
+<div class="pg" id="pg-promoted"><div class="cd"><h2>📢 Promoted Listings Optimizer</h2><div class="sb">Find the eBay ad rate that maximizes expected daily profit.</div>
+<div class="rw"><div class="f1"><input type="text" id="poq" placeholder='e.g. "Nintendo Switch OLED"'></div><input type="number" id="pobp" placeholder="Buy price" step="0.01" style="width:100px"></div>
+<div class="rw mt1"><select id="post" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><input type="number" id="poship" placeholder="Ship cost" step="0.01" style="width:90px"><button class="bt bt-p" id="poGo">Optimize</button></div>
+<div id="poRes" class="mt1"></div></div></div>
 
 <!-- TRENDING -->
 <div class="pg" id="pg-trending"><div class="cd"><h2>📊 Trending</h2><div class="sb">Anonymous. What other flippers are watching.</div><div id="tr"></div></div></div>
@@ -368,7 +375,7 @@ D('asub').onclick = async function() {
 };
 
 // Navigation
-var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi'];
+var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi','promoted'];
 function showPage(p) {
   for (var i = 0; i < PAGES.length; i++) {
     var pg = D('pg-' + PAGES[i]);
@@ -385,6 +392,7 @@ function showPage(p) {
   if (p === 'dash') loadDash();
   if (p === 'hot') loadHot();
   if (p === 'bulk') D('bulkRes').innerHTML = '';
+  if (p === 'promoted') D('poRes').innerHTML = '';
 }
 var navEls = document.querySelectorAll('[data-pg]');
 for (var i = 0; i < navEls.length; i++) {
@@ -1057,6 +1065,53 @@ async function loadDash() {
 D('dashRef').onclick = loadDash;
 
 // What's Hot
+// ═══ PROMOTED OPTIMIZER ═══
+D('poGo').onclick = async function() {
+  var q = D('poq').value.trim();
+  var bp = parseFloat(D('pobp').value) || 0;
+  var st = D('post').value || 'none';
+  var sh = parseFloat(D('poship').value) || 0;
+  if (!q || bp <= 0) return;
+  D('poGo').textContent = 'Optimizing...';
+  try {
+    var r = await fetch('/api/promoted-optimize?q=' + encodeURIComponent(q) + '&buy_price=' + bp.toFixed(2) + '&store_tier=' + st + '&shipping=' + sh.toFixed(2));
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    var rec = d.recommendation || {};
+    var res = D('poRes');
+    res.innerHTML = '';
+    var wrap = EL('div', 'cd', res);
+    wrap.style.cssText = 'border:2px solid var(--a);background:rgba(91,141,239,.08)';
+    var big = EL('div', '', wrap);
+    big.style.cssText = 'font-size:1.6rem;font-weight:800;color:var(--a);margin-bottom:8px';
+    TXT(big, '\ud83d\udce2 Use ' + rec.rate + '% Ad Rate');
+    var reason = EL('div', '', wrap);
+    reason.style.cssText = 'font-size:.85rem;color:var(--t2);margin-bottom:12px';
+    TXT(reason, rec.reason || '');
+    var grid = EL('div', 'gd', wrap);
+    addStatCard(grid, '💰 Market Median', '$' + FMT(d.market_median), '', '');
+    addStatCard(grid, '💵 Net Profit', (rec.net_profit >= 0 ? '+' : '') + '$' + FMT(rec.net_profit), rec.net_margin + '%', rec.net_profit >= 0 ? 'g' : 'r');
+    addStatCard(grid, '⏱ Sells In', '~' + rec.days_to_sell_estimate + 'd', 'Velocity ' + rec.velocity_multiplier + 'x', '');
+    addStatCard(grid, '📈 Expected Daily', (rec.expected_daily_profit >= 0 ? '+' : '') + '$' + FMT(rec.expected_daily_profit), '/day', rec.expected_daily_profit >= 0 ? 'g' : 'r');
+    var tbl = EL('div', '', res);
+    tbl.style.cssText = 'margin-top:16px;overflow-x:auto';
+    var table = EL('table', '', tbl);
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:.78rem';
+    var thead = EL('thead', '', table);
+    thead.innerHTML = '<tr style="border-bottom:1px solid var(--b)"><th style="text-align:left;padding:6px">Ad Rate</th><th style="text-align:right;padding:6px">Net Profit</th><th style="text-align:right;padding:6px">Ad Cost</th><th style="text-align:right;padding:6px">~Days to Sell</th><th style="text-align:right;padding:6px">Expected Daily</th></tr>';
+    var tbody = EL('tbody', '', table);
+    for (var i = 0; i < d.scenarios.length; i++) {
+      var s = d.scenarios[i];
+      var row = EL('tr', '', tbody);
+      row.style.cssText = 'border-bottom:1px solid var(--b)';
+      if (s.rate === rec.rate) row.style.background = 'rgba(91,141,239,.15)';
+      row.innerHTML = '<td style="padding:6px">' + s.rate + '%' + (s.rate === rec.rate ? ' ⭐' : '') + '</td><td style="text-align:right;padding:6px;color:' + (s.net_profit >= 0 ? 'var(--g)' : 'var(--r)') + '">' + (s.net_profit >= 0 ? '+' : '') + '$' + FMT(s.net_profit) + '</td><td style="text-align:right;padding:6px">$' + FMT(s.promoted_fee) + '</td><td style="text-align:right;padding:6px">' + s.days_to_sell_estimate + 'd</td><td style="text-align:right;padding:6px;color:' + (s.expected_daily_profit >= 0 ? 'var(--g)' : 'var(--r)') + '">' + (s.expected_daily_profit >= 0 ? '+' : '') + '$' + FMT(s.expected_daily_profit) + '</td>';
+    }
+  } catch(e) { D('poRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
+  D('poGo').textContent = 'Optimize';
+};
+D('poq').onkeydown = D('pobp').onkeydown = function(e) { if (e.key === 'Enter') D('poGo').click(); };
+
 async function loadHot() {
   try {
     var items = await fetch('/api/whats-hot').then(function(r) { return r.json(); });
