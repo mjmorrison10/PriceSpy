@@ -382,55 +382,159 @@ def _ebay_condition_to_canonical(raw: str) -> str:
 
 # ── eBay Sold Data (Finding API) ───────────────────────────────────────
 def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
-    """Real sold/completed listings via Finding API."""
+    """Real sold/completed listings. Tries Browse API, then Finding API, then HTML fallback."""
+    # Try Browse API first (requires OAuth token)
     token = _get_ebay_token()
-    if not token:
-        return []
-    params = {
-        "OPERATION-NAME": "findCompletedItems",
-        "SERVICE-VERSION": "1.13.0",
-        "SECURITY-APPNAME": EBAY_CLIENT_ID,
-        "RESPONSE-DATA-FORMAT": "JSON",
-        "REST-PAYLOAD": "true",
-        "keywords": query,
-        "paginationInput.entriesPerPage": str(min(limit, 100)),
-        "sortOrder": "EndTimeSoonest",
-        "itemFilter(0).name": "SoldItemsOnly",
-        "itemFilter(0).value": "true",
-    }
-    if condition != "all" and condition in EBAY_COND:
-        params["itemFilter(1).name"] = "Condition"
-        params["itemFilter(1).value"] = EBAY_COND[condition]["id"]
+    if token:
+        try:
+            filters = ["soldItemOnly:true"]
+            if condition != "all" and condition in EBAY_COND:
+                filters.append(f"conditionIds:{{{EBAY_COND[condition]['id']}}}")
+            url = f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search"
+            params = {
+                "q": query,
+                "filter": ",".join(filters),
+                "limit": str(min(limit, 50)),
+                "sort": "newlyListed",
+            }
+            r = SESSION.get(url, params=params, headers={"Authorization": f"Bearer {token}"}, timeout=20)
+            if r.status_code == 200:
+                data = r.json()
+                items = data.get("itemSummaries", [])
+                results = []
+                for it in items:
+                    try:
+                        price = float(it.get("price", {}).get("value", 0))
+                    except (ValueError, TypeError):
+                        continue
+                    if price <= 0:
+                        continue
+                    cond = _ebay_condition_to_canonical(it.get("condition", ""))
+                    item_end = it.get("itemEndDate", "")
+                    sold_date = item_end[:10] if isinstance(item_end, str) and len(item_end) >= 10 else None
+                    results.append({
+                        "title": it.get("title", ""),
+                        "price": price,
+                        "sold_date": sold_date,
+                        "condition": cond,
+                        "url": it.get("itemWebUrl", ""),
+                        "source": "eBay Browse API",
+                    })
+                if results:
+                    return results
+                print(f"eBay Browse API returned 0 sold items for '{query}'")
+            else:
+                print(f"eBay Browse API sold error: {r.status_code} {r.text[:200]}")
+        except Exception as e:
+            print(f"eBay Browse API sold failed: {e}")
+
+    # Fallback to Finding API (only needs App ID / Client ID)
+    if EBAY_CLIENT_ID:
+        try:
+            params = {
+                "OPERATION-NAME": "findCompletedItems",
+                "SERVICE-VERSION": "1.13.0",
+                "SECURITY-APPNAME": EBAY_CLIENT_ID,
+                "RESPONSE-DATA-FORMAT": "JSON",
+                "REST-PAYLOAD": "true",
+                "GLOBAL-ID": "EBAY-US",
+                "keywords": query,
+                "paginationInput.entriesPerPage": str(min(limit, 100)),
+                "sortOrder": "EndTimeSoonest",
+                "itemFilter(0).name": "SoldItemsOnly",
+                "itemFilter(0).value": "true",
+            }
+            if condition != "all" and condition in EBAY_COND:
+                params["itemFilter(1).name"] = "Condition"
+                params["itemFilter(1).value"] = EBAY_COND[condition]["id"]
+            r = SESSION.get(EBAY_FINDING_API, params=params, timeout=20)
+            if r.status_code == 200:
+                data = r.json()
+                response = data.get("findCompletedItemsResponse", [{}])[0]
+                ack = response.get("ack", [""])[0]
+                if ack == "Success":
+                    search_res = response.get("searchResult", [{}])
+                    items = search_res[0].get("item", []) if search_res and search_res[0] else []
+                    results = []
+                    for it in items:
+                        try:
+                            price = float(it.get("sellingStatus", [{}])[0].get("currentPrice", [{}])[0].get("__value__", 0))
+                        except (IndexError, KeyError, ValueError, TypeError):
+                            continue
+                        if price <= 0:
+                            continue
+                        cond = _ebay_condition_to_canonical(it.get("condition", [{}])[0].get("conditionDisplayName", "") if it.get("condition") else "")
+                        end_time = it.get("listingInfo", [{}])[0].get("endTime", "")
+                        sold_date = end_time[:10] if isinstance(end_time, str) and len(end_time) >= 10 else None
+                        results.append({
+                            "title": it.get("title", [""])[0],
+                            "price": price,
+                            "sold_date": sold_date,
+                            "condition": cond,
+                            "url": it.get("viewItemURL", [""])[0],
+                            "source": "eBay Finding API",
+                        })
+                    if results:
+                        return results
+                    print(f"eBay Finding API returned 0 sold items for '{query}'")
+                else:
+                    print(f"eBay Finding API ack={ack}: {response}")
+            else:
+                print(f"eBay Finding API error: {r.status_code} {r.text[:200]}")
+        except Exception as e:
+            print(f"eBay Finding API sold failed: {e}")
+
+    # Last resort: HTML scraping (often blocked by eBay)
+    return _scrape_ebay_sold_fallback(query, condition, limit)
+
+def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 60) -> list[dict]:
+    """Fallback HTML scraper for eBay sold listings when API is empty or fails."""
+    u = f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(query)}&LH_Sold=1&LH_Complete=1&_ipg=60"
+    if condition and condition != "all" and condition in EBAY_COND:
+        u += f"&LH_ItemCondition={EBAY_COND[condition]['id']}"
     try:
-        r = SESSION.get(EBAY_FINDING_API, params=params, timeout=20)
+        r = SESSION.get(u, timeout=15)
         if r.status_code != 200:
-            print(f"eBay Finding API error: {r.status_code} {r.text[:200]}")
+            print(f"eBay HTML fallback error: {r.status_code}")
             return []
-        data = r.json()
-        search_res = data.get("findCompletedItemsResponse", [{}])[0].get("searchResult", [{}])
-        items = search_res[0].get("item", []) if search_res else []
-        results = []
-        for it in items:
-            try:
-                price = float(it.get("sellingStatus", [{}])[0].get("currentPrice", [{}])[0].get("__value__", 0))
-            except (IndexError, KeyError, ValueError):
-                continue
-            if price <= 0:
-                continue
-            cond = _ebay_condition_to_canonical(it.get("condition", [{}])[0].get("conditionDisplayName", "") if it.get("condition") else "")
-            end_time = it.get("listingInfo", [{}])[0].get("endTime", "")
-            sold_date = end_time[:10] if isinstance(end_time, str) and len(end_time) >= 10 else None
-            results.append({
-                "title": it.get("title", [""])[0],
-                "price": price,
-                "sold_date": sold_date,
-                "condition": cond,
-                "url": it.get("viewItemURL", [""])[0],
-            })
-        return results
     except Exception as e:
-        print(f"eBay sold listings error: {e}")
-    return []
+        print(f"eBay HTML fallback request failed: {e}")
+        return []
+    soup = BeautifulSoup(r.text, "html.parser")
+    items = []
+    for li in soup.select("li.s-item.s-item__pl-on-bottom"):
+        try:
+            title_el = li.select_one(".s-item__title")
+            price_el = li.select_one(".s-item__price")
+            date_el = li.select_one(".s-item__endedDate")
+            link_el = li.select_one("a.s-item__link")
+            title = title_el.get_text(strip=True) if title_el else ""
+            price_text = price_el.get_text(strip=True) if price_el else ""
+            price = _clean_price(price_text) if price_text else 0
+            if not title or price <= 0.01 or "shop on ebay" in title.lower():
+                continue
+            sold_date = None
+            if date_el:
+                date_text = date_el.get_text(strip=True)
+                m = re.search(r'(\w{3}\s+\d{1,2},\s+\d{4})', date_text)
+                if m:
+                    try:
+                        sold_date = datetime.strptime(m.group(1), "%b %d, %Y").strftime("%Y-%m-%d")
+                    except ValueError:
+                        pass
+            cond = _ebay_condition_to_canonical(title)
+            items.append({
+                "title": title, "price": price, "sold_date": sold_date,
+                "condition": cond,
+                "url": link_el.get("href", "") if link_el else "",
+                "source": "eBay HTML",
+            })
+            if len(items) >= limit:
+                break
+        except Exception:
+            continue
+    print(f"eBay HTML fallback returned {len(items)} items for '{query}'")
+    return items
 
 # ── PriceCharting (games only, optional) ─────────────────────────────────
 GAMING_KEYWORDS = [
@@ -879,7 +983,10 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
 
     # 1. Real eBay sold listings
     sold_items = _ebay_sold_listings(q, filter_condition, limit=100)
-    data_source = f"eBay Sold Listings ({len(sold_items)} items)"
+    source_label = "eBay"
+    if sold_items and sold_items[0].get("source"):
+        source_label = sold_items[0]["source"].replace("eBay ", "")
+    data_source = f"eBay Sold Listings ({len(sold_items)} items via {source_label})"
     confidence = "high" if len(sold_items) >= 5 else "medium" if len(sold_items) > 0 else "low"
     market_note = "Real sold prices from eBay" if sold_items else "No recent eBay sold listings found."
 

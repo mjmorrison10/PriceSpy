@@ -25,13 +25,18 @@
 
 ---
 
-## eBay Browse API Setup (for real price data)
+## eBay API Setup (for real price data)
 
-PriceSpy uses **Smart Estimates** by default, which are statistical estimates based on market baselines. To get **real eBay sold prices**, you need to configure the eBay Browse API.
+PriceSpy pulls **real eBay sold and active prices** using official eBay APIs. No synthetic data, no fake listings.
 
-### Why eBay API?
+### How it works
 
-The previous scraping approach is blocked by eBay's Cloudflare protection and bot detection. The official eBay Browse API provides reliable, legal access to sold listing data.
+PriceSpy tries APIs in this order:
+1. **eBay Browse API** (OAuth) — for sold listings + active listings
+2. **eBay Finding API** (App ID only) — fallback for sold listings
+3. **HTML scraping** — last resort, often blocked by eBay
+
+For best results, configure both the Browse API and the Finding API.
 
 ### Setup Steps (30 min)
 
@@ -41,35 +46,43 @@ The previous scraping approach is blocked by eBay's Cloudflare protection and bo
 
 2. **Create an Application**
    - Go to "My Apps" → "Create App"
-   - Select "Production" for live data (there's a free tier)
-   - Select "Buy" for the API scope
+   - Select **"Production"** for live data
+   - Enable both API scopes:
+     - **Buy → Browse API** (for sold + active listings, OAuth)
+     - **Buy → Finding API** (for completed/sold listings, App ID only)
+   - For seller features, also enable:
+     - **Sell → Inventory API**
+     - **Sell → Fulfillment API**
+     - **Sell → Account API**
 
 3. **Get Your Credentials**
    - You'll receive a **Client ID** and **Client Secret**
-   - Keep these secure - they're like a password
+   - These are the same as your **App ID** and **Cert ID** for older APIs
 
 4. **Add Environment Variables**
-   - `EBAY_CLIENT_ID` = your Client ID
-   - `EBAY_CLIENT_SECRET` = your Client Secret
+   - `EBAY_CLIENT_ID` = your Client ID / App ID
+   - `EBAY_CLIENT_SECRET` = your Client Secret / Cert ID
+   - `EBAY_REDIRECT_URI` = `https://your-domain.com/api/ebay/callback` (for seller OAuth)
 
 ### On Render.com:
 1. Go to your dashboard → Environment → Environment Variables
-2. Add both `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET`
+2. Add `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, and `EBAY_REDIRECT_URI`
 3. Redeploy your service
 
 ### Free Tier Limits
-- 5,000 API calls per day
-- 10,000 API calls per month
+- Browse API: 5,000+ calls per day depending on plan
+- Finding API: 5,000 calls per day
 - Plenty for personal use or small-scale flipping
 
 ### What You'll Get
 Once configured, PriceSpy will show:
-- "📊 Real eBay Data (N items)" badge
-- Actual sold prices from eBay
-- Higher confidence indicators
-- No more "Smart Estimate" warnings
+- ✅ "Real eBay Data (N items via Browse API)" badge
+- ✅ Actual sold prices from eBay
+- ✅ Real active listings + competition data
+- ✅ eBay seller dashboard + sales analytics
 
 ### Troubleshooting
+- **Sold listings return 0 but eBay.com shows sales**: The Browse API may not expose all sold items. The app automatically falls back to the Finding API. Make sure your app has **Finding API** enabled.
 - **401 errors**: Your credentials may have expired - regenerate them
 - **429 rate limit**: You've hit the daily limit - wait 24 hours
 - **No data returned**: Some items may not have recent sold listings on eBay
