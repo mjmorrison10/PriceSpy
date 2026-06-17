@@ -820,6 +820,7 @@ def _stats_by_condition(items: list[dict], cond_system: dict) -> dict:
         prices = groups.get(cond, [])
         if not prices:
             continue
+        prices = [p for p in prices if p is not None]
         prices.sort()
         n = len(prices)
         median = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2
