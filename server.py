@@ -1992,7 +1992,7 @@ def _do_search(q: str, period_days: int, period: str,
     else:
         direction = "stable"
 
-    recent_sold = sorted(sold_filtered, key=lambda x: x.get("sold_date", ""), reverse=True)[:30]
+    recent_sold = sorted(sold_filtered, key=lambda x: x.get("sold_date") or "", reverse=True)[:30]
     flip = _analyze_flip(sold_stats, active_stats, sold_filtered, active_filtered,
                          trend, condition_sold, buy_price, is_vehicle,
                          platform, shipping_cost)
