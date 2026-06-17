@@ -138,9 +138,10 @@ class SQLiteProvider(StorageProvider):
     def add_watchlist_item(self, user_id, data):
         conn = self._connect()
         conn.execute(
-            "INSERT INTO watchlist (user_id,query,condition_filter,buy_price,platform,shipping_cost,last_median,last_low,last_high,last_score,last_checked) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+            "INSERT INTO watchlist (user_id,query,condition_filter,buy_price,platform,store_tier,shipping_cost,last_median,last_low,last_high,last_score,last_checked) VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
             (user_id, data["query"], data.get("condition", "all"),
              data.get("buy_price", 0), data.get("platform", "ebay"),
+             data.get("store_tier", "none"),
              data.get("shipping_cost", 0), data.get("median", 0),
              data.get("low", 0), data.get("high", 0), data.get("score", 0)))
         conn.commit()
@@ -360,6 +361,7 @@ class FirebaseProvider(StorageProvider):
             "condition_filter": data.get("condition", "all"),
             "buy_price": data.get("buy_price", 0),
             "platform": data.get("platform", "ebay"),
+            "store_tier": data.get("store_tier", "none"),
             "shipping_cost": data.get("shipping_cost", 0),
             "last_median": data.get("median", 0),
             "last_low": data.get("low", 0),

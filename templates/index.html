@@ -2,19 +2,15 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PriceSpy</title>
-<!-- PWA Meta Tags -->
+<title>PriceSpy — eBay Flip Analyzer</title>
 <meta name="theme-color" content="#5b8def">
 <meta name="description" content="Real-time eBay price research tool for resellers and flippers">
 <link rel="manifest" href="/static/manifest.json">
-<!-- iOS PWA Support -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PriceSpy">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-<!-- Favicon -->
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-<link rel="shortcut icon" type="image/svg+xml" href="/static/logo.svg">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -27,7 +23,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 header{background:var(--s);border-bottom:1px solid var(--b);padding:10px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
 .logo{font-size:1.3rem;font-weight:800;background:linear-gradient(135deg,var(--a),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .hr{margin-left:auto;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.pil{padding:5px 10px;background:var(--s2);border:1px solid var(--b);border-radius:14px;color:var(--t2);font-size:.7rem;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+.pil{padding:5px 10px;background:var(--s2);border:1px solid var(--b);border-radius:14px;color:var(--t2);font-size:.7rem;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit;text-decoration:none}
 .pil:hover{color:var(--t);border-color:var(--t2)}.pil.ac{background:var(--a);color:#fff;border-color:var(--a)}
 main{max-width:1200px;margin:0 auto;padding:20px 16px 80px}
 .cd{background:var(--s);border:1px solid var(--b);border-radius:var(--rad);padding:20px;margin-bottom:16px}
@@ -84,8 +80,12 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <button class="pil" data-pg="lot">🧮</button>
 <button class="pil" data-pg="deals">📋</button>
 <button class="pil" data-pg="trending">📊</button>
-<button class="pil" id="navBulk" data-pg="bulk">📥</button><button class="pil" id="navDash" data-pg="dash">📈</button><button class="pil" id="navHot" data-pg="hot">🔥</button><button class="pil" id="navROI" data-pg="roi">💵</button><button class="pil" id="navAuth">👤</button>
-<a href="/policy" class="pil" id="navPolicy" style="margin-left:4px">📜</a>
+<button class="pil" data-pg="bulk">📥</button>
+<button class="pil" data-pg="dash">📈</button>
+<button class="pil" data-pg="hot">🔥</button>
+<button class="pil" data-pg="roi">💵</button>
+<button class="pil" id="navAuth">👤</button>
+<a href="/policy" class="pil" style="margin-left:4px">📜</a>
 <button class="pil" id="navTheme">🌙</button>
 </div>
 </header>
@@ -93,13 +93,24 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <main>
 <!-- SEARCH -->
 <div class="pg on" id="pg-search">
-<div class="cd"><h2>What's it worth?</h2><div class="sb">Real-time eBay price data, conditions, fees, liquidity, saturation — built for flippers.</div>
+<div class="cd"><h2>What's it worth on eBay?</h2><div class="sb">Real eBay sold prices, eBay fees, liquidity, and saturation. No fake data.</div>
 <div class="rw"><div class="f1"><input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none"><input type="text" id="q" placeholder='Try "Nintendo Switch OLED" or "iPhone 15 Pro"...' autocomplete="off"></div><button class="bt bt-p" id="camBtn" title="Identify item from photo" style="padding:10px 14px">📷</button><button class="bt bt-p" id="qb">Search</button></div>
 <div class="rw mt1">
-<select id="cond" style="width:155px"><option value="all">All Conditions</option></select><button class="bt bt-p" id="condGo" title="Search with this condition">🔍 Go</button>
-<select id="plat" style="width:125px"><option value="ebay">eBay 13.25%</option><option value="mercari">Mercari 10%</option><option value="poshmark">Poshmark 20%</option><option value="facebook">FB 5%</option><option value="local">Local 0%</option></select>
+<select id="cond" style="width:170px"><option value="all">All Conditions</option></select>
+<select id="storeTier" style="width:150px">
+  <option value="none">No eBay Store</option>
+  <option value="basic">Basic Store</option>
+  <option value="premium">Premium Store</option>
+  <option value="anchor">Anchor Store</option>
+</select>
 <input type="number" id="bp" placeholder="Buy price" step="0.01" min="0" style="width:100px">
-<input type="number" id="ship" placeholder="Ship" step="0.01" min="0" style="width:80px">
+<input type="number" id="ship" placeholder="Ship cost" step="0.01" min="0" style="width:90px">
+<input type="number" id="promo" placeholder="Ad %" value="0" step="0.1" min="0" style="width:70px">
+</div>
+<div class="rw mt1" style="position:relative">
+  <input type="text" id="catSearch" placeholder="eBay category (optional)" style="flex:1" autocomplete="off">
+  <input type="hidden" id="catId">
+  <div id="catSug" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--s);border:1px solid var(--b);border-radius:var(--rs);z-index:50;max-height:200px;overflow:auto"></div>
 </div></div>
 <div style="display:flex;align-items:center;gap:8px;min-height:20px;margin-bottom:8px"><span class="spn" id="sp"></span><span id="st" style="font-size:.78rem;color:var(--t2)"></span></div>
 <div class="er" id="em"></div>
@@ -109,7 +120,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <!-- QUICK DEAL -->
 <div class="pg" id="pg-quick"><div class="cd"><h2>⚡ Quick Deal</h2><div class="sb">Describe item + price. Instant BUY or LEAVE.</div>
 <div class="rw"><div class="f1"><input type="text" id="qd" placeholder='e.g. "Nikon D850, good, $400"'><button class="bt bt-p" id="micBtn" title="Speak your item" style="padding:10px 14px">🎤</button><button class="bt bt-p" id="scanBtn" title="Scan barcode" style="padding:10px 14px">📷</button></div><button class="bt bt-p" id="qdg">Analyze</button></div>
-<div class="rw mt1"><select id="qdp" style="width:120px"><option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="poshmark">Poshmark</option><option value="facebook">FB</option><option value="local">Local</option></select><input type="number" id="qds" placeholder="Ship" step="0.01" style="width:80px"></div>
+<div class="rw mt1"><select id="qdst" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><input type="number" id="qds" placeholder="Ship" step="0.01" style="width:80px"></div>
 <div id="vst" style="font-size:.7rem;color:var(--a);margin-top:4px;display:none"></div><div id="qdr"></div></div></div>
 
 <!-- WATCHLIST -->
@@ -123,16 +134,16 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <!-- LOT CALC -->
 <div class="pg" id="pg-lot"><div class="cd"><h2>🧮 Lot Calculator</h2>
 <div class="rw"><div class="f1"><input type="text" id="li" placeholder="Item name"></div><input type="number" id="lp" placeholder="Price" step="0.01" style="width:90px"><button class="bt bt-p" id="ladd">+</button></div>
-<div class="rw mt1"><select id="lplat" style="width:110px"><option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="facebook">FB</option><option value="local">Local</option></select><input type="number" id="lship" value="0" step="0.01" style="width:80px"><button class="bt bt-p" id="lcalc">⚡ Calc</button></div>
+<div class="rw mt1"><select id="lst" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><input type="number" id="lship" value="0" step="0.01" style="width:80px"><button class="bt bt-p" id="lcalc">⚡ Calc</button></div>
 <div id="litems" class="mt1"></div><div id="lres"></div></div></div>
 
 <!-- DEALS -->
 <div class="pg" id="pg-deals"><div class="cd"><h2>📋 Deal History</h2><div id="dh"></div></div></div>
 
 <!-- BULK IMPORT -->
-<div class="pg" id="pg-bulk"><div class="cd"><h2>📥 Bulk Price Check</h2><div class="sb">Paste items or upload CSV. Get instant pricing on everything.</div>
+<div class="pg" id="pg-bulk"><div class="cd"><h2>📥 Bulk Price Check</h2><div class="sb">Paste items or upload CSV. eBay-only pricing.</div>
 <textarea id="bulkText" placeholder="Paste items (one per line):&#13;&#10;Nintendo Switch OLED, $100&#13;&#10;iPhone 13 Pro, $250&#13;&#10;Nike Dunk Low, $45" style="width:100%;height:160px;padding:12px;background:var(--bg);border:1.5px solid var(--b);border-radius:var(--rs);color:var(--t);font-size:.85rem;resize:vertical;font-family:inherit;outline:none;"></textarea>
-<div class="rw mt1"><select id="bulkPlat" style="width:120px"><option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="facebook">FB</option><option value="local">Local</option></select><button class="bt bt-p" id="bulkGo">⚡ Price All</button></div>
+<div class="rw mt1"><select id="bulkSt" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><button class="bt bt-p" id="bulkGo">⚡ Price All</button></div>
 <div id="bulkRes" class="mt1"></div></div></div>
 
 <!-- DASHBOARD -->
@@ -144,10 +155,11 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <!-- TRUE ROI -->
 <div class="pg" id="pg-roi"><div class="cd"><h2>💵 True ROI Calculator</h2><div class="sb">Factor in gas, storage, time, and taxes for real profit.</div>
 <div class="rw mb1"><input type="number" id="roiBuy" placeholder="Buy price" step="0.01" style="flex:1"><input type="number" id="roiSell" placeholder="Sell price" step="0.01" style="flex:1"></div>
-<div class="rw mb1"><select id="roiPlat" style="flex:1"><option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="local">Local</option></select><input type="number" id="roiShip" placeholder="Ship material" step="0.01" style="flex:1"></div>
-<div class="rw mb1"><input type="number" id="roiGas" placeholder="Gas cost" step="0.01" style="flex:1"><input type="number" id="roiStorage" placeholder="Storage $" step="0.01" style="flex:1"></div>
-<div class="rw mb1"><input type="number" id="roiHrs" placeholder="Hours spent" step="0.01" style="flex:1"><input type="number" id="roiRate" placeholder="Hourly rate" value="35" step="0.01" style="flex:1"></div>
-<div class="rw mb1"><input type="number" id="roiTax" placeholder="Tax rate %" value="25" step="0.01" style="flex:1"><button class="bt bt-p" id="roiCalc" style="flex:1">Calculate True Profit</button></div>
+<div class="rw mb1"><input type="text" id="roiCat" placeholder="Category (e.g. sneakers, electronics)" style="flex:1"><select id="roiSt" style="flex:1"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select></div>
+<div class="rw mb1"><input type="number" id="roiShip" placeholder="Ship material" step="0.01" style="flex:1"><input type="number" id="roiGas" placeholder="Gas cost" step="0.01" style="flex:1"></div>
+<div class="rw mb1"><input type="number" id="roiStorage" placeholder="Storage $" step="0.01" style="flex:1"><input type="number" id="roiHrs" placeholder="Hours spent" step="0.01" style="flex:1"></div>
+<div class="rw mb1"><input type="number" id="roiRate" placeholder="Hourly rate" value="35" step="0.01" style="flex:1"><input type="number" id="roiTax" placeholder="Tax rate %" value="25" step="0.01" style="flex:1"></div>
+<div class="rw mb1"><button class="bt bt-p" id="roiCalc" style="flex:1">Calculate True Profit</button></div>
 <div id="roiRes" class="mt1"></div></div></div>
 
 <!-- TRENDING -->
@@ -159,7 +171,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <!-- Inventory Modal -->
 <div class="ov" id="invOv"><div class="ovc"><h3>📦 Add Item</h3>
 <input type="text" id="in" placeholder="Item name" class="mb1">
-<div class="rw mb1"><input type="number" id="ibp" placeholder="Paid" step="0.01" style="flex:1"><select id="iplat" style="flex:1"><option value="ebay">eBay</option><option value="mercari">Mercari</option><option value="facebook">FB</option><option value="local">Local</option></select></div>
+<div class="rw mb1"><input type="number" id="ibp" placeholder="Paid" step="0.01" style="flex:1"><select id="iplat" style="flex:1"><option value="ebay">eBay</option></select></div>
 <input type="text" id="icond" placeholder="Condition" class="mb1">
 <div class="rw mb1"><select id="istat" style="flex:1"><option value="bought">📦 Bought</option><option value="listed">📝 Listed</option><option value="sold">💰 Sold</option></select><input type="number" id="isp" placeholder="Sold for" step="0.01" style="flex:1"></div>
 <button class="bt bt-p" id="isave" style="width:100%">Save</button>
@@ -177,6 +189,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <!-- Account Menu Modal -->
 <div class="ov" id="accountOv"><div class="ovc"><h3 id="accountTitle">👤 Account</h3>
 <div id="accountInfo" style="padding:12px 0;text-align:center"></div>
+<button class="bt bt-p" id="connectEbayBtn" style="width:100%;margin-bottom:6px">🔗 Connect eBay Seller Account</button>
 <button class="bt bt-g" id="logoutBtn" style="width:100%">🚪 Logout</button>
 <button class="bt bt-g" style="width:100%;margin-top:6px" onclick="HIDE('accountOv')">Close</button></div></div>
 
@@ -185,6 +198,12 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <img id="photoPreview" src="" alt="Preview" style="width:100%;border-radius:var(--rs);margin-bottom:10px;max-height:240px;object-fit:contain;background:#000;display:none">
 <input type="text" id="photoDesc" placeholder="Describe what's in the photo (e.g. 'Nike Air Force 1 white')" class="mb1">
 <div class="rw"><button class="bt bt-p" id="photoSearchBtn" style="flex:1">🔍 Search This Item</button><button class="bt bt-g" id="photoCancel" style="flex:1">Cancel</button></div></div></div>
+
+<!-- Barcode Scan Overlay -->
+<div class="ov" id="scanOv"><div class="ovc"><h3>📷 Scan Barcode</h3>
+<video id="scanVid" autoplay playsinline style="width:100%;border-radius:var(--rs);background:#000;max-height:260px;object-fit:cover"></video>
+<div id="scanSt" style="text-align:center;padding:12px;font-size:.9rem;color:var(--t2)">Point camera at a barcode</div>
+<button class="bt bt-g" style="width:100%" onclick="stopScan()">Cancel</button></div></div>
 
 <script>
 // ════════════════════════════ FIREBASE ════════════════════════════
@@ -197,37 +216,29 @@ var firebaseConfig = {
   appId: "1:726753231810:web:d60b003525a06175800c5b",
   measurementId: "G-4DEM1DZ0CL"
 };
-var fbApp = null;
-var fbAuth = null;
-var fbDb = null;
+var fbApp = null, fbAuth = null, fbDb = null;
 try {
   fbApp = firebase.initializeApp(firebaseConfig);
   fbAuth = firebase.auth();
   fbDb = firebase.firestore();
-  console.log("🔥 Firebase connected");
+  console.log("Firebase connected");
 } catch(e) { console.log("Firebase init skipped:", e.message); }
 
 // ════════════════════════════ HELPERS ════════════════════════════
 var D = function(id) { return document.getElementById(id); };
 var HIDE = function(id) { D(id).style.display = 'none'; };
 var SHOW = function(id) { D(id).style.display = 'flex'; };
-var FMT = function(n) { return (n||0).toFixed ? Number(n).toFixed(2) : '0.00'; };
+var FMT = function(n) { return (n || 0).toFixed ? Number(n).toFixed(2) : '0.00'; };
 var getToken = function() { return localStorage.getItem('ps-tk') || ''; };
 
-// Safe element creation — ZERO innerHTML string concat with parens
 var EL = function(tag, cls, parent) {
   var el = document.createElement(tag);
   if (cls) el.className = cls;
   if (parent) parent.appendChild(el);
   return el;
 };
+var TXT = function(el, text) { el.textContent = text || ''; return el; };
 
-var TXT = function(el, text) {
-  el.textContent = text || '';
-  return el;
-};
-
-// State
 var chart = null;
 var data = null;
 var period = '6m';
@@ -236,11 +247,19 @@ var user = null;
 var isReg = false;
 var lotItems = [];
 var PERIODS = ['1w','1m','3m','6m','1y','2y','3y','5y','10y'];
-var CLAB = {all:'All Conditions','new (sealed)':'📦 New Sealed','new':'🆕 New','like new':'✨ Like New/Open Box','cib':'📋 CIB','very good':'👍 Very Good','good':'👌 Good/Used','acceptable':'⚠️ Fair','loose':'💿 Loose','untested':'❓ Untested','for parts':'🔧 For Parts','excellent':'⭐ Excellent','fair':'⚠️ Fair','poor':'🔧 Poor'};
+
+var CLAB = {
+  all:'All Conditions', new:'🆕 New', new_other:'📦 New Other', new_defects:'⚠️ New w/ Defects',
+  manufacturer_refurbished:'🔧 Mfr Refurbished', seller_refurbished:'🔧 Seller Refurbished',
+  used:'👌 Used', very_good:'👍 Very Good', good:'✅ Good', acceptable:'⚠️ Acceptable', for_parts:'🔧 For Parts'
+};
 function CL(c) { return CLAB[c] || c || 'Unknown'; }
 
 // Theme
-if (localStorage.getItem('ps-thm') === 'light') { document.documentElement.setAttribute('data-theme','light'); D('navTheme').textContent = '☀️'; }
+if (localStorage.getItem('ps-thm') === 'light') {
+  document.documentElement.setAttribute('data-theme','light');
+  D('navTheme').textContent = '☀️';
+}
 D('navTheme').onclick = function() {
   var n = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', n);
@@ -248,7 +267,7 @@ D('navTheme').onclick = function() {
   localStorage.setItem('ps-thm', n);
 };
 
-// Bible
+// Bible verses
 var VRS = [
   {t:'"For I know well the plans I have in mind for you."',r:'Jeremiah 29:11'},
   {t:'"I can do all things through him who strengthens me."',r:'Philippians 4:13'},
@@ -284,15 +303,16 @@ setVerse();
 setInterval(setVerse, 3600000);
 
 // Auth
-try { token = localStorage.getItem('ps-tk') || ''; user = JSON.parse(localStorage.getItem('ps-usr') || 'null'); } catch(e) {}
+try {
+  token = localStorage.getItem('ps-tk') || '';
+  user = JSON.parse(localStorage.getItem('ps-usr') || 'null');
+} catch(e) {}
 if (user) { D('navAuth').textContent = user.display_name || 'User'; }
-D('navAuth').onclick = function() { 
-  if (token && user) { 
-    D('accountInfo').innerHTML = '<div style="font-size:1.2rem;font-weight:600;margin-bottom:4px">' + (user.display_name || 'User') + '</div><div style="color:var(--t2);font-size:.85rem">' + (user.email || '') + '</div>'; 
-    SHOW('accountOv'); 
-  } else { 
-    SHOW('authOv'); 
-  } 
+D('navAuth').onclick = function() {
+  if (token && user) {
+    D('accountInfo').innerHTML = '<div style="font-size:1.2rem;font-weight:600;margin-bottom:4px">' + (user.display_name || 'User') + '</div><div style="color:var(--t2);font-size:.85rem">' + (user.email || '') + '</div>';
+    SHOW('accountOv');
+  } else { SHOW('authOv'); }
 };
 D('logoutBtn').onclick = function() {
   token = ''; user = null;
@@ -300,49 +320,51 @@ D('logoutBtn').onclick = function() {
   D('navAuth').textContent = '👤';
   HIDE('accountOv');
 };
+D('connectEbayBtn').onclick = async function() {
+  try {
+    var r = await fetch('/api/ebay/auth');
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    if (d.auth_url) window.open(d.auth_url, '_blank');
+  } catch(err) { alert('Could not start eBay auth: ' + err.message); }
+};
 
-// Google Sign-In
 D('googleLogin').onclick = async function() {
-  if (!fbAuth) { D('aerr').textContent = 'Firebase not connected.'; D('aerr').style.display = 'block'; return; }
+  if (!fbAuth) { D('aerr').textContent = 'Firebase not connected.'; D('aerr').classList.add('on'); return; }
   try {
     var provider = new firebase.auth.GoogleAuthProvider();
     var result = await fbAuth.signInWithPopup(provider);
     var idToken = await result.user.getIdToken();
     var r = await fetch('/api/auth/firebase', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id_token: idToken})});
     var respData = await r.json();
-    if (!r.ok) { D('aerr').textContent = respData.error || 'Server error. Is FIREBASE_CREDENTIALS set on Render?'; D('aerr').style.display = 'block'; return; }
-    if (respData.token) {
-      token = respData.token; user = respData.user;
-      localStorage.setItem('ps-tk', token); localStorage.setItem('ps-usr', JSON.stringify(user));
-      HIDE('authOv'); D('navAuth').textContent = user.display_name || user.email;
-    }
-  } catch(err) { D('aerr').textContent = err.message; D('aerr').style.display = 'block'; }
+    if (!r.ok) { D('aerr').textContent = respData.error || 'Server error.'; D('aerr').classList.add('on'); return; }
+    token = respData.token; user = respData.user;
+    localStorage.setItem('ps-tk', token); localStorage.setItem('ps-usr', JSON.stringify(user));
+    HIDE('authOv'); D('navAuth').textContent = user.display_name || user.email;
+  } catch(err) { D('aerr').textContent = err.message; D('aerr').classList.add('on'); }
 };
 D('atog').onclick = function() {
   isReg = !isReg;
   D('authT').textContent = isReg ? '📝 Create Account' : '👤 Login';
   D('asub').textContent = isReg ? 'Create' : 'Login';
   D('an').style.display = isReg ? 'block' : 'none';
-  D('aerr').style.display = 'none';
+  D('aerr').classList.remove('on');
 };
 D('asub').onclick = async function() {
   var e = D('ae').value.trim();
   var p = D('ap').value.trim();
   var n = D('an').value.trim();
-  if (!e || !p) { D('aerr').textContent = 'Email and password required'; D('aerr').style.display = 'block'; return; }
+  if (!e || !p) { D('aerr').textContent = 'Email and password required'; D('aerr').classList.add('on'); return; }
   try {
     var ep = isReg ? '/api/auth/register' : '/api/auth/login';
     var b = isReg ? {email:e, password:p, display_name:n || e.split('@')[0]} : {email:e, password:p};
     var r = await fetch(ep, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
     var respData = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Failed');
-    token = d.token;
-    user = d.user;
-    localStorage.setItem('ps-tk', token);
-    localStorage.setItem('ps-usr', JSON.stringify(user));
-    HIDE('authOv');
-    D('navAuth').textContent = user.display_name || 'User';
-  } catch(err) { D('aerr').textContent = err.message; D('aerr').style.display = 'block'; }
+    if (!r.ok) throw new Error(respData.error || 'Failed');
+    token = respData.token; user = respData.user;
+    localStorage.setItem('ps-tk', token); localStorage.setItem('ps-usr', JSON.stringify(user));
+    HIDE('authOv'); D('navAuth').textContent = user.display_name || 'User';
+  } catch(err) { D('aerr').textContent = err.message; D('aerr').classList.add('on'); }
 };
 
 // Navigation
@@ -359,14 +381,16 @@ function showPage(p) {
   if (p === 'watch') loadWl();
   if (p === 'inventory') loadInv();
   if (p === 'deals') loadDh();
-  if (p === 'trending') loadTr(); if (p === 'dash') loadDash(); if (p === 'hot') loadHot(); if (p === 'bulk') D('bulkRes').innerHTML = '';
+  if (p === 'trending') loadTr();
+  if (p === 'dash') loadDash();
+  if (p === 'hot') loadHot();
+  if (p === 'bulk') D('bulkRes').innerHTML = '';
 }
 var navEls = document.querySelectorAll('[data-pg]');
 for (var i = 0; i < navEls.length; i++) {
   navEls[i].onclick = (function(pg) { return function() { showPage(pg); }; })(navEls[i].dataset.pg);
 }
 
-// Conditions
 function setConds(avail, labels) {
   if (!avail || !avail.length) return;
   if (labels) { for (var k in labels) { CLAB[k] = labels[k]; } }
@@ -374,86 +398,114 @@ function setConds(avail, labels) {
   var sel = D('cond');
   sel.innerHTML = '';
   var opt = document.createElement('option');
-  opt.value = 'all';
-  opt.textContent = 'All Conditions';
-  sel.appendChild(opt);
+  opt.value = 'all'; opt.textContent = 'All Conditions'; sel.appendChild(opt);
   for (var i = 0; i < avail.length; i++) {
     var c = avail[i];
     if (c === 'all') continue;
     var o = document.createElement('option');
-    o.value = c;
-    o.textContent = CL(c);
-    sel.appendChild(o);
+    o.value = c; o.textContent = CL(c); sel.appendChild(o);
   }
   sel.value = curr;
 }
 
-// Time pills
-function buildPills() {
-  var c = D('tpls');
-  if (!c) return;
-  c.innerHTML = '';
-  for (var i = 0; i < PERIODS.length; i++) {
-    var p = PERIODS[i];
-    var el = EL('span', 'tp' + (p === period ? ' sl' : ''), c);
-    TXT(el, p.toUpperCase());
-    el.dataset.p = p;
-    el.onclick = function() { period = this.dataset.p; buildPills(); search(); };
-  }
-}
-
 // Search
-function ld(o) { D('sp').classList.toggle('on', o); D('st').textContent = o ? 'Searching...' : ''; }
-function er(m) { D('em').textContent = m; D('em').style.display = 'block'; }
-function ce() { D('em').style.display = 'none'; }
+function ld(o) { D('sp').classList.toggle('on', o); D('st').textContent = o ? 'Searching eBay...' : ''; }
+function er(m) { D('em').textContent = m; D('em').classList.add('on'); }
+function ce() { D('em').classList.remove('on'); }
 
 async function search(filterCond) {
   var q = D('q').value.trim();
   if (!q) return;
-  ld(true);
-  ce();
-  D('res').classList.remove('on');
+  ld(true); ce(); D('res').classList.remove('on');
   var c = filterCond || D('cond').value || 'all';
   var bp = parseFloat(D('bp').value) || 0;
-  var pl = D('plat').value || 'ebay';
+  var st = D('storeTier').value || 'none';
   var sh = parseFloat(D('ship').value) || 0;
+  var pr = parseFloat(D('promo').value) || 0;
+  var catId = D('catId').value || '';
   var u = '/api/search?q=' + encodeURIComponent(q) + '&period=' + period + '&condition=' + encodeURIComponent(c);
   if (bp > 0) u += '&buy_price=' + bp.toFixed(2);
-  u += '&platform=' + pl;
+  u += '&store_tier=' + st;
   if (sh > 0) u += '&shipping=' + sh.toFixed(2);
+  if (pr > 0) u += '&promoted_rate=' + pr.toFixed(2);
+  if (catId) u += '&ebay_category_id=' + encodeURIComponent(catId);
   try {
     var r = await fetch(u);
-    data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Search failed');
-    if (!data.sold_summary || !data.sold_summary.count) { er('No results for "' + q + '".'); ld(false); return; }
+    var respData = await r.json();
+    if (!r.ok) throw new Error(respData.error || 'Search failed');
+    data = respData;
+    if (!data.sold_summary || !data.sold_summary.count) {
+      // No sold results is OK — still show active and market note
+    }
     setConds(data.available_conditions, data.condition_labels);
     renderAll(data);
     D('res').classList.add('on');
-    D('res').scrollIntoView({behavior:'smooth',block:'start'});
+    D('res').scrollIntoView({behavior:'smooth', block:'start'});
   } catch(err) { er(err.message); }
   finally { ld(false); }
 }
 
 D('qb').onclick = function() { search(); };
 D('q').onkeydown = function(e) { if (e.key === 'Enter') search(); };
+D('cond').onchange = function() { search(); };
 
-// Render — ALL DOM creation, NO innerHTML with concatenated parens
+// Category search
+var catTimeout = null;
+async function fetchCategories() {
+  var q = D('catSearch').value.trim();
+  if (!q) { D('catSug').style.display = 'none'; return; }
+  try {
+    var r = await fetch('/api/categories?q=' + encodeURIComponent(q));
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    var sug = D('catSug');
+    sug.innerHTML = '';
+    if (!d.suggestions || !d.suggestions.length) { sug.style.display = 'none'; return; }
+    for (var i = 0; i < d.suggestions.length; i++) {
+      var s = d.suggestions[i];
+      var cat = s.category || {};
+      var div = EL('div', '', sug);
+      div.style.cssText = 'padding:8px 10px;cursor:pointer;font-size:.78rem;border-bottom:1px solid var(--b)';
+      div.textContent = (cat.categoryName || 'Unknown') + (cat.categoryPath ? ' \u2014 ' + cat.categoryPath : '');
+      div.onmousedown = (function(id, name) { return function() {
+        D('catSearch').value = name;
+        D('catId').value = id;
+        D('catSug').style.display = 'none';
+      }; })(cat.categoryId, cat.categoryName);
+    }
+    sug.style.display = 'block';
+  } catch(e) { D('catSug').style.display = 'none'; }
+}
+D('catSearch').oninput = function() {
+  if (catTimeout) clearTimeout(catTimeout);
+  catTimeout = setTimeout(fetchCategories, 250);
+};
+D('catSearch').onblur = function() { setTimeout(function() { D('catSug').style.display = 'none'; }, 200); };
+D('catSearch').onfocus = function() { if (D('catSearch').value.trim()) fetchCategories(); };
+
 function renderAll(d) {
   var res = D('res');
-  // Clear previous results
   res.innerHTML = '';
-
-  // Build sections using DOM
   var sumGrid = EL('div', 'gd', res);
   buildSummary(sumGrid, d);
   buildTimePills(res);
-  buildDirection(res, d);
+  buildDataSource(res, d);
   buildChart(res, d);
   buildConditions(res, d);
   buildSaturation(res, d);
-  buildVerification(res, d);
   buildFlip(res, d);
+  buildPromotedImpact(res, d);
   buildListings(res, d);
+  buildVerification(res, d);
+}
+
+function addStatCard(grid, label, value, sub, cls) {
+  var sc = EL('div', 'sc', grid);
+  EL('div', 'lb', sc).textContent = label;
+  var vl = EL('div', 'vl', sc);
+  vl.textContent = value;
+  if (cls) vl.classList.add(cls);
+  EL('div', 'sm', sc).textContent = sub;
 }
 
 function buildSummary(grid, d) {
@@ -466,32 +518,19 @@ function buildSummary(grid, d) {
   var pc = f.potential_profit_pct || 0;
 
   addStatCard(grid, '💰 Median Sold' + flt, '$' + FMT(s.median), s.count + ' sold', '');
-  addStatCard(grid, '📊 Range (10th-90th %ile)', '$' + FMT(s.p10 || s.low) + ' \u2013 $' + FMT(s.p90 || s.high), 'Min/Max $' + FMT(s.low) + '/' + '$' + FMT(s.high), '');
-  
+  addStatCard(grid, '📊 Range (10th-90th)', '$' + FMT(s.p10 || s.low) + ' \u2013 $' + FMT(s.p90 || s.high), 'Min/Max $' + FMT(s.low) + ' / $' + FMT(s.high), '');
   var actCls = (a.median && s.median && a.median < s.median) ? 'g' : (a.median > s.median * 1.05 ? 'am' : '');
   addStatCard(grid, '🏷️ Active Market', '$' + (a.median ? FMT(a.median) : '--'), a.count + ' listed', actCls);
-  
   var dir = d.direction;
   var dirVal = dir === 'rising' ? '\u2191 Rising' : (dir === 'falling' ? '\u2193 Falling' : '\u2192 Stable');
   var dirCls = dir === 'rising' ? 'g' : (dir === 'falling' ? 'r' : 'am');
   addStatCard(grid, '📈 Trend', dirVal, d.period.toUpperCase(), dirCls);
-  
   var score = f.score || 0;
   var scCls = score >= 70 ? 'g' : (score >= 50 ? '' : (score >= 30 ? 'am' : 'r'));
   addStatCard(grid, '🔄 Flip Score', score + '/100', f.verdict || 'N/A', scCls);
-  
   var netCls = p >= 0 ? 'g' : 'r';
-  var netSub = (pc >= 0 ? '+' : '') + pc + '%' + (f.user_buy_price_used ? ' \u00b7 your price' : '');
+  var netSub = (pc >= 0 ? '+' : '') + pc + '%' + (f.user_buy_price_used ? ' \u00b7 your price' : ' \u00b7 low sold');
   addStatCard(grid, '💵 Net Profit', (p >= 0 ? '+' : '') + '$' + FMT(p), netSub, netCls);
-}
-
-function addStatCard(grid, label, value, sub, cls) {
-  var sc = EL('div', 'sc', grid);
-  EL('div', 'lb', sc).textContent = label;
-  var vl = EL('div', 'vl', sc);
-  vl.textContent = value;
-  if (cls) vl.classList.add(cls);
-  EL('div', 'sm', sc).textContent = sub;
 }
 
 function buildTimePills(res) {
@@ -501,106 +540,35 @@ function buildTimePills(res) {
     var el = EL('span', 'tp' + (p === period ? ' sl' : ''), pl);
     TXT(el, p.toUpperCase());
     el.dataset.p = p;
-    el.onclick = function() { period = this.dataset.p; buildTimePills(res); search(); };
+    el.onclick = function() { period = this.dataset.p; search(); };
   }
 }
 
-function buildDirection(res, d) {
-  var dir = d.direction;
-  var isSynthetic = d.is_synthetic;
-  var confidence = d.confidence || 'low';
-  var realCount = d.real_items_count || 0;
-  var confLabel = d.confidence_label || '';
-  var marketNote = d.market_note || '';
+function buildDataSource(res, d) {
   var dr = EL('div', '', res);
   dr.style.marginBottom = '12px';
-  
-  // Direction badge
-  var bdg = EL('span', 'bdg ' + (dir === 'rising' ? 'ri' : (dir === 'falling' ? 'fa' : 'st')), dr);
-  bdg.textContent = (dir === 'rising' ? '📈 Rising' : (dir === 'falling' ? '📉 Falling' : '📊 Stable'));
-  
-  // Data source badge with confidence color
+  var confidence = d.confidence || 'low';
   var confColors = {high: 'ri', medium: 'st', low: 'fa'};
   var srcBdg = EL('span', 'bdg ' + confColors[confidence], dr);
-  srcBdg.style.marginLeft = '6px';
-  srcBdg.textContent = d.data_source || 'Unknown Source';
-  
-  // Verification link
+  srcBdg.textContent = d.data_source || 'Unknown';
+  var confSpan = EL('span', '', dr);
+  confSpan.style.cssText = 'font-size:.65rem;color:var(--t2);margin-left:6px';
+  confSpan.textContent = d.confidence_label || '';
   if (d.ebay_url) {
     var verifyLink = EL('a', '', dr);
-    verifyLink.href = d.ebay_url;
-    verifyLink.target = '_blank';
-    verifyLink.rel = 'noopener noreferrer';
+    verifyLink.href = d.ebay_url; verifyLink.target = '_blank'; verifyLink.rel = 'noopener noreferrer';
     verifyLink.style.cssText = 'margin-left:12px;font-size:.7rem;color:var(--a);text-decoration:none;font-weight:600';
     verifyLink.textContent = 'Verify on eBay →';
   }
-  
-  // Confidence label
-  if (confLabel) {
-    var confSpan = EL('span', '', dr);
-    confSpan.style.cssText = 'font-size:.65rem;color:var(--t2);margin-left:6px';
-    confSpan.textContent = confLabel;
-  }
-  
-  // Market note (AI reasoning, etc.)
-  if (marketNote) {
+  if (d.market_note) {
     var noteDiv = EL('div', '', dr);
     noteDiv.style.cssText = 'font-size:.65rem;color:var(--am);margin-top:6px;padding:4px 8px;background:rgba(251,191,36,.1);border-radius:6px';
-    noteDiv.textContent = marketNote;
+    noteDiv.textContent = d.market_note;
   }
-}
-
-function buildVerification(res, d) {
-  // Show sample sold items for verification
-  var recentSold = d.recent_sold || [];
-  
-  var vc = EL('div', 'cd', res);
-  EL('h3', '', vc).textContent = '🔍 Verify Prices';
-  
-  var sub = EL('div', 'sb', vc);
-  sub.textContent = d.is_synthetic ? 
-    'Sample items (synthetic estimate) - verify with links below:' : 
-    'Recent sold items used for this analysis:';
-  
-  // Verification links
-  var q = encodeURIComponent(d.query);
-  var links = [
-    {name: 'eBay Sold', url: `https://www.ebay.com/sch/i.html?_nkw=${q}&LH_Sold=1&LH_Complete=1`, icon: '🔗'},
-    {name: 'Swappa', url: `https://swappa.com/search?search_term=${q}`, icon: '📱'},
-    {name: 'Back Market', url: `https://www.backmarket.com/search?search=${q}`, icon: '♻️'},
-    {name: 'Facebook', url: `https://www.facebook.com/marketplace/search?keywords=${q}`, icon: '📘'},
-  ];
-  
-  var linkGrid = EL('div', '', vc);
-  linkGrid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px';
-  for (var i = 0; i < links.length; i++) {
-    var link = links[i];
-    var a = EL('a', 'bt bt-g', linkGrid);
-    a.href = link.url;
-    a.target = '_blank';
-    a.textContent = link.icon + ' ' + link.name;
-    a.style.textDecoration = 'none';
-  }
-  
-  // Sample sold items
-  if (recentSold.length > 0) {
-    var sampleItems = recentSold.slice(0, 5);
-    sampleItems.forEach(function(item) {
-      var itemRow = EL('div', 'lr', vc);
-      
-      var info = EL('div', 'it', itemRow);
-      var title = item.title || 'Unknown item';
-      info.textContent = title.substring(0, 50) + (title.length > 50 ? '...' : '');
-      
-      var price = EL('div', 'ip', itemRow);
-      price.textContent = item.price ? '$' + item.price.toFixed(2) : '';
-      
-      var cond = EL('span', 'ic', itemRow);
-      cond.textContent = item.condition || '';
-      
-      var date = EL('div', 'id', itemRow);
-      date.textContent = item.sold_date || '';
-    });
+  if (d.api_missing) {
+    var setupDiv = EL('div', '', dr);
+    setupDiv.style.cssText = 'font-size:.65rem;color:var(--r);margin-top:6px';
+    setupDiv.textContent = 'eBay API not configured. ' + (d.setup_instructions || '');
   }
 }
 
@@ -609,8 +577,7 @@ function buildChart(res, d) {
   if (!d.trend || d.trend.length < 2) return;
   var fc = d.active_filter_condition || '';
   var cd = EL('div', 'cd', res);
-  var h3 = EL('h3', '', cd);
-  h3.textContent = '📈 Price Trend' + (fc && fc !== 'all' ? ' \u2014 ' + CL(fc) : '');
+  EL('h3', '', cd).textContent = '📈 Price Trend' + (fc && fc !== 'all' ? ' \u2014 ' + CL(fc) : '');
   var cw = EL('div', 'cw', cd);
   var canvas = document.createElement('canvas');
   cw.appendChild(canvas);
@@ -619,12 +586,12 @@ function buildChart(res, d) {
     data: {
       labels: d.trend.map(function(t) { return t.date; }),
       datasets: [
-        {label:'High',data:d.trend.map(function(t){return t.high}),borderColor:'rgba(248,113,113,.4)',borderWidth:1,pointRadius:0,fill:'+1',tension:.3},
-        {label:'Median',data:d.trend.map(function(t){return t.median}),borderColor:'#5b8def',borderWidth:2.5,pointRadius:0,fill:false,tension:.3},
-        {label:'Low',data:d.trend.map(function(t){return t.low}),borderColor:'rgba(52,211,153,.4)',borderWidth:1,pointRadius:0,fill:false,tension:.3}
+        {label:'High', data:d.trend.map(function(t){return t.high}), borderColor:'rgba(248,113,113,.4)', borderWidth:1, pointRadius:0, fill:'+1', tension:.3},
+        {label:'Median', data:d.trend.map(function(t){return t.median}), borderColor:'#5b8def', borderWidth:2.5, pointRadius:0, fill:false, tension:.3},
+        {label:'Low', data:d.trend.map(function(t){return t.low}), borderColor:'rgba(52,211,153,.4)', borderWidth:1, pointRadius:0, fill:false, tension:.3}
       ]
     },
-    options: {responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},plugins:{legend:{position:'top',labels:{color:'#9aa0a6',usePointStyle:true,padding:16,font:{size:11}}}},scales:{x:{ticks:{color:'#888',maxTicksLimit:8,font:{size:10}}},y:{ticks:{color:'#888',font:{size:10},callback:function(v){return'$'+v.toFixed(0)}}}}}
+    options: {responsive:true, maintainAspectRatio:false, interaction:{intersect:false, mode:'index'}, plugins:{legend:{position:'top', labels:{color:'#9aa0a6', usePointStyle:true, padding:16, font:{size:11}}}}, scales:{x:{ticks:{color:'#888', maxTicksLimit:8, font:{size:10}}}, y:{ticks:{color:'#888', font:{size:10}, callback:function(v){return'$'+v.toFixed(0)}}}}}
   });
 }
 
@@ -645,17 +612,18 @@ function buildConditions(res, d) {
     var tab = EL('button', 'ct' + (isA ? ' ac' : ''), tabs);
     TXT(tab, lb);
     tab.onclick = (function(cc) { return function() { D('cond').value = cc; search(cc); }; })(c);
-    
     var panel = EL('div', '', panels);
     if (!isA) panel.style.display = 'none';
-    var sold = cs[c] || {low:0,median:0,high:0,mean:0,count:0};
-    var act = ca[c] || {low:0,median:0,high:0,mean:0,count:0};
+    var sold = cs[c] || {low:0, median:0, high:0, mean:0, count:0};
+    var act = ca[c] || {low:0, median:0, high:0, mean:0, count:0};
     var grid = EL('div', 'gd', panel);
     grid.style.marginTop = '10px';
     addStatCard(grid, 'Sold Median', '$' + FMT(sold.median), sold.count + ' sold', '');
     addStatCard(grid, 'Sold Range', '$' + FMT(sold.low) + ' \u2013 $' + FMT(sold.high), 'Avg $' + FMT(sold.mean), '');
     addStatCard(grid, 'Active Median', '$' + FMT(act.median), act.count + ' listed', '');
-    addStatCard(grid, 'Potential', '$' + FMT(sold.median - sold.low), 'Buy low, sell median', 'g');
+    if (sold.median > 0 && sold.low > 0) {
+      addStatCard(grid, 'Potential', '$' + FMT(sold.median - sold.low), 'Buy low, sell median', 'g');
+    }
     var fb = EL('button', 'bt bt-p', panel);
     TXT(fb, '🔍 Show ' + lb + ' Only');
     fb.onclick = (function(cc) { return function() { D('cond').value = cc; search(cc); }; })(c);
@@ -668,7 +636,6 @@ function buildSaturation(res, d) {
   if (!opp.score) return;
   var cd = EL('div', 'cd', res);
   EL('h3', '', cd).textContent = '📊 Market Analysis';
-  
   var row = EL('div', '', cd);
   row.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px';
   var oc = opp.score >= 70 ? 'gr' : (opp.score >= 50 ? 'ok' : (opp.score >= 30 ? 'wa' : 'no'));
@@ -681,7 +648,6 @@ function buildSaturation(res, d) {
   var vd = EL('div', '', info);
   vd.style.cssText = 'font-size:.78rem;color:var(--t2)';
   TXT(vd, opp.description || '');
-  
   var rt = sat.active_sold_ratio || 0;
   var rp = Math.min(100, (rt / 10) * 100);
   var rc = rt < 1 ? 'var(--g)' : (rt < 3 ? 'var(--am)' : (rt < 8 ? '#f97316' : 'var(--r)'));
@@ -709,29 +675,40 @@ function buildFlip(res, d) {
   var det = EL('div', '', info);
   det.style.cssText = 'font-size:.78rem;color:var(--t2)';
   TXT(det, f.verdict_detail || '');
-  
   var grid = EL('div', 'gd', cd);
   var p = f.potential_profit || 0;
   var pc = f.potential_profit_pct || 0;
   addStatCard(grid, '💵 Net Profit', (p >= 0 ? '+' : '') + '$' + FMT(p), FMT(pc) + '%', p >= 0 ? 'g' : 'r');
   addStatCard(grid, '📊 Buy \u2192 Sell', '$' + FMT(f.potential_buy_price || 0) + ' \u2192 $' + FMT(f.potential_sell_price || 0), '', '');
-  addStatCard(grid, '🔄 Sell-Through', FMT(f.sell_through_rate || 0) + '%', '', '');
   addStatCard(grid, '⚡ Velocity', FMT(f.velocity_per_day || 0) + '/day', f.velocity_label || '', '');
-  var compCls = (f.competition_level || 0) < 30 ? 'g' : ((f.competition_level || 0) < 60 ? '' : 'r');
-  addStatCard(grid, '🏪 Competition', (f.competition_level || 0) + '%', '', compCls);
-  var riskCls = (f.risk_level || '') === 'Low' ? 'g' : ((f.risk_level || '') === 'High' ? 'r' : 'am');
-  addStatCard(grid, '⚠️ Risk', f.risk_level || 'N/A', '', riskCls);
-  
+  var liq = f.liquidity || {};
+  addStatCard(grid, '⏱ Sells In', liq.avg_days_to_sell ? '~' + Math.round(liq.avg_days_to_sell) + 'd' : 'N/A', liq.label || '', '');
+  addStatCard(grid, '⚠️ Risk', f.risk_level || 'N/A', '', f.risk_level === 'Low' ? 'g' : (f.risk_level === 'High' ? 'r' : 'am'));
   var fc2 = f.fee_calculation || {};
   if (fc2.platform) {
     var feeDiv = EL('div', '', cd);
     feeDiv.style.cssText = 'margin-top:10px;padding-top:10px;border-top:1px solid var(--b);font-size:.75rem;color:var(--t2)';
-    TXT(feeDiv, '🧾 ' + fc2.platform + ': $' + FMT(fc2.platform_fee) + ' + $' + FMT(fc2.payment_fee) + ' + $' + FMT(fc2.shipping_cost) + ' = -$' + FMT(fc2.total_fees) + ' | Net: $' + FMT(fc2.net_profit));
+    TXT(feeDiv, '\ud83d\udccb ' + fc2.platform + ' FVF ' + fc2.fvf_pct + '% = $' + FMT(fc2.fvf) + ' | Total fees: $' + FMT(fc2.total_fees) + ' | Net: $' + FMT(fc2.net_profit));
+  }
+}
+
+function buildPromotedImpact(res, d) {
+  var pi = d.promoted_impact || [];
+  if (!pi.length) return;
+  var cd = EL('div', 'cd', res);
+  EL('h3', '', cd).textContent = '📢 Promoted Listings Impact';
+  var sub = EL('div', 'sb', cd);
+  sub.textContent = 'How eBay ad rates affect your net profit.';
+  var grid = EL('div', 'gd', cd);
+  for (var i = 0; i < pi.length; i++) {
+    var r = pi[i];
+    var isRec = r.rate === 0 ? 'Recommended' : '';
+    var cls = r.net_profit >= 0 ? 'g' : 'r';
+    addStatCard(grid, r.rate + '% Ad Rate' + (isRec ? ' ⭐' : ''), (r.net_profit >= 0 ? '+' : '') + '$' + FMT(r.net_profit), 'Ad cost: $' + FMT(r.promoted_fee), cls);
   }
 }
 
 function buildListings(res, d) {
-  // Sold
   var sH = EL('h3', '', res);
   sH.style.cssText = 'font-size:.95rem;margin-bottom:10px';
   TXT(sH, '🟢 Recently Sold');
@@ -749,10 +726,8 @@ function buildListings(res, d) {
   } else {
     var emp = EL('div', '', res);
     emp.style.cssText = 'text-align:center;padding:30px;color:var(--t2);font-size:.82rem';
-    TXT(emp, 'No sold listings.');
+    TXT(emp, 'No eBay sold listings found.');
   }
-  
-  // Active
   var aH = EL('h3', '', res);
   aH.style.cssText = 'font-size:.95rem;margin-bottom:10px;margin-top:20px';
   TXT(aH, '🔵 Active Listings');
@@ -768,8 +743,53 @@ function buildListings(res, d) {
   } else {
     var emp = EL('div', '', res);
     emp.style.cssText = 'text-align:center;padding:30px;color:var(--t2);font-size:.82rem';
-    TXT(emp, 'No active listings.');
+    TXT(emp, 'No eBay active listings found.');
   }
+}
+
+function buildVerification(res, d) {
+  var recentSold = d.recent_sold || [];
+  var vc = EL('div', 'cd', res);
+  EL('h3', '', vc).textContent = '🔍 Verify Prices';
+  var sub = EL('div', 'sb', vc);
+  sub.textContent = 'Always verify before buying. eBay prices change fast.';
+  var q = encodeURIComponent(d.query);
+  var links = [
+    {name:'eBay Sold', url:'https://www.ebay.com/sch/i.html?_nkw=' + q + '&LH_Sold=1&LH_Complete=1', icon:'🔗'},
+    {name:'eBay Active', url:'https://www.ebay.com/sch/i.html?_nkw=' + q, icon:'🔍'},
+  ];
+  if (_isGaming(d.query)) {
+    links.push({name:'PriceCharting', url:'https://www.pricecharting.com/search-products?q=' + q, icon:'🎮'});
+  }
+  var linkGrid = EL('div', '', vc);
+  linkGrid.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px';
+  for (var i = 0; i < links.length; i++) {
+    var link = links[i];
+    var a = EL('a', 'bt bt-g', linkGrid);
+    a.href = link.url; a.target = '_blank'; a.textContent = link.icon + ' ' + link.name;
+    a.style.textDecoration = 'none';
+  }
+  if (recentSold.length > 0) {
+    var sampleItems = recentSold.slice(0, 5);
+    sampleItems.forEach(function(item) {
+      var itemRow = EL('div', 'lr', vc);
+      var info = EL('div', 'it', itemRow);
+      var title = item.title || 'Unknown item';
+      info.textContent = title.substring(0, 50) + (title.length > 50 ? '...' : '');
+      var price = EL('div', 'ip', itemRow);
+      price.textContent = item.price ? '$' + item.price.toFixed(2) : '';
+      var cond = EL('span', 'ic', itemRow);
+      cond.textContent = item.condition || '';
+      var date = EL('div', 'id', itemRow);
+      date.textContent = item.sold_date || '';
+    });
+  }
+}
+
+function _isGaming(q) {
+  var gaming = ["nintendo","switch","playstation","ps5","ps4","ps3","xbox","pokemon","mario","zelda","gameboy","wii","sega","atari","gamecube","ds","3ds","amiibo","nes","snes","n64","dreamcast","genesis"];
+  var ql = (q || '').toLowerCase();
+  return gaming.some(function(k) { return ql.indexOf(k) !== -1; });
 }
 
 // Quick Deal
@@ -778,13 +798,14 @@ D('qd').onkeydown = function(e) { if (e.key === 'Enter') rqd(); };
 async function rqd() {
   var inp = D('qd').value.trim();
   if (!inp) return;
-  var pl = D('qdp').value || 'ebay';
+  var st = D('qdst').value || 'none';
   var sh = parseFloat(D('qds').value) || 0;
   D('qdg').textContent = '...';
   try {
-    var r = await fetch('/api/quick-deal?input=' + encodeURIComponent(inp) + '&platform=' + pl + '&shipping=' + sh.toFixed(2));
+    var r = await fetch('/api/quick-deal?input=' + encodeURIComponent(inp) + '&store_tier=' + st + '&shipping=' + sh.toFixed(2));
     var respData = await r.json();
-    if (!r.ok) throw new Error(d.error || 'Failed');
+    if (!r.ok) throw new Error(respData.error || 'Failed');
+    var d = respData;
     var isB = d.verdict === 'BUY';
     var isM = d.verdict === 'MAYBE';
     var bc = isB ? 'var(--g)' : (isM ? 'var(--am)' : 'var(--r)');
@@ -814,8 +835,7 @@ async function rqd() {
     if (token && d.verdict) {
       try {
         await fetch('/api/deal-history?token=' + getToken(), {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          method: 'POST', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({item_name:d.item_name, detected_condition:d.detected_condition, your_price:d.your_price, market_median:d.market_median, net_profit:d.net_profit, flip_score:d.flip_score, verdict:d.verdict})
         });
       } catch(e) {}
@@ -863,8 +883,7 @@ async function loadInv() {
       addStatCard(D('invStats'), '📦 Items', String(s.total_items), '$' + FMT(s.total_cost) + ' invested', '');
       addStatCard(D('invStats'), '📝 Listed', String(s.listed), '', '');
       addStatCard(D('invStats'), '💰 Sold', String(s.sold), '$' + FMT(s.sold_revenue) + ' revenue', '');
-      var pcls = (s.sold_profit || 0) >= 0 ? 'g' : 'r';
-      addStatCard(D('invStats'), '💵 Profit', ((s.sold_profit || 0) >= 0 ? '+' : '') + '$' + FMT(s.sold_profit), '', pcls);
+      addStatCard(D('invStats'), '💵 Profit', ((s.sold_profit || 0) >= 0 ? '+' : '') + '$' + FMT(s.sold_profit), '', (s.sold_profit || 0) >= 0 ? 'g' : 'r');
     }
     if (!items || !items.length) { D('inv').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No items yet.</div>'; return; }
     D('inv').innerHTML = '';
@@ -881,9 +900,7 @@ async function loadInv() {
         var pfSpan = EL('span', '', row);
         pfSpan.style.cssText = 'color:' + (pf >= 0 ? 'var(--g)' : 'var(--r)') + ';font-weight:700';
         TXT(pfSpan, (pf >= 0 ? '+' : '') + '$' + FMT(pf));
-      } else {
-        EL('span', 'id', row).textContent = st;
-      }
+      } else { EL('span', 'id', row).textContent = st; }
       var del = EL('button', 'bt bt-g', row); del.style.cssText = 'padding:3px 8px;font-size:.65rem'; TXT(del, '✕');
       del.onclick = (function(id) { return function() { delInv(id); }; })(it.id);
     }
@@ -891,20 +908,17 @@ async function loadInv() {
 }
 async function delInv(id) { await fetch('/api/inventory/' + id + '?token=' + getToken(), {method:'DELETE'}); loadInv(); }
 D('isave').onclick = async function() {
-  var b = {item_name:D('in').value.trim(), buy_price:parseFloat(D('ibp').value)||0, platform:D('iplat').value, condition:D('icond').value.trim(), status:D('istat').value, sold_price:parseFloat(D('isp').value)||0};
+  var b = {item_name:D('in').value.trim(), buy_price:parseFloat(D('ibp').value)||0, platform:'ebay', condition:D('icond').value.trim(), status:D('istat').value, sold_price:parseFloat(D('isp').value)||0};
   if (!b.item_name) return;
   await fetch('/api/inventory?token=' + getToken(), {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
-  HIDE('invOv');
-  loadInv();
+  HIDE('invOv'); loadInv();
 };
 D('csvBtn').onclick = async function() {
   var items = await fetch('/api/inventory?token=' + getToken()).then(function(r) { return r.json(); });
   var csv = 'Item,Condition,Buy,Status,Sold,Profit\n' + items.map(function(it) { return '"' + it.item_name + '","' + it.condition + '",' + it.buy_price + ',' + it.status + ',' + it.sold_price + ',' + ((it.sold_price||0) - it.buy_price); }).join('\n');
   var b = new Blob([csv], {type:'text/csv'});
   var a = document.createElement('a');
-  a.href = URL.createObjectURL(b);
-  a.download = 'inventory.csv';
-  a.click();
+  a.href = URL.createObjectURL(b); a.download = 'inventory.csv'; a.click();
 };
 
 // Lot Calculator
@@ -923,19 +937,17 @@ D('ladd').onclick = function() {
   var n = D('li').value.trim();
   var p = parseFloat(D('lp').value) || 0;
   if (!n || p <= 0) return;
-  LZ.push({name:n, price:p});
-  D('li').value = '';
-  D('lp').value = '';
-  rLot();
+  LZ.push({name:n, price:p}); D('li').value = ''; D('lp').value = ''; rLot();
 };
 D('lcalc').onclick = async function() {
   if (!LZ.length) return;
-  var pl = D('lplat').value || 'ebay';
+  var st = D('lst').value || 'none';
   var sh = parseFloat(D('lship').value) || 0;
   D('lcalc').textContent = '...';
   try {
-    var r = await fetch('/api/lot-calculate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:LZ, platform:pl, shipping_per_item:sh})});
-    var respData = await r.json();
+    var r = await fetch('/api/lot-calculate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:LZ, store_tier:st, shipping_per_item:sh})});
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
     var c = d.verdict_color === 'green' ? 'var(--g)' : (d.verdict_color === 'amber' ? 'var(--am)' : 'var(--r)');
     var bg = d.verdict_color === 'green' ? 'rgba(52,211,153,.08)' : (d.verdict_color === 'amber' ? 'rgba(251,191,36,.08)' : 'rgba(248,113,113,.08)');
     D('lres').innerHTML = '';
@@ -949,8 +961,7 @@ D('lcalc').onclick = async function() {
     addStatCard(grid, 'Cost', '$' + FMT(d.total_cost), '', '');
     addStatCard(grid, 'Market', '$' + FMT(d.total_market_value), '', '');
     addStatCard(grid, 'Net', ((d.total_profit||0) >= 0 ? '+' : '') + '$' + FMT(d.total_profit), '', (d.total_profit||0) >= 0 ? 'g' : 'r');
-    LZ.length = 0;
-    rLot();
+    LZ.length = 0; rLot();
   } catch(e) { D('lres').innerHTML = '<div class="er on">' + e.message + '</div>'; }
   D('lcalc').textContent = '⚡ Calc';
 };
@@ -980,7 +991,6 @@ async function loadTr() {
   try {
     var items = await fetch('/api/trending').then(function(r) { return r.json(); });
     if (!items || !items.length) { D('tr').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No data yet.</div>'; return; }
-    var mx = items[0] ? items[0].count : 1;
     D('tr').innerHTML = '';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
@@ -994,8 +1004,7 @@ async function loadTr() {
   } catch(e) { D('tr').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
 
-
-// ═══ BULK IMPORT ═══
+// Bulk Import
 D('bulkGo').onclick = async function() {
   var txt = D('bulkText').value.trim();
   if (!txt) return;
@@ -1012,16 +1021,17 @@ D('bulkGo').onclick = async function() {
   }
   if (!items.length) { D('bulkRes').innerHTML = '<div class="er on">No valid items found. Use format: Item Name, $Price</div>'; return; }
   D('bulkGo').textContent = 'Processing ' + items.length + ' items...';
-  var pl = D('bulkPlat').value || 'ebay';
+  var st = D('bulkSt').value || 'none';
   try {
-    var r = await fetch('/api/bulk-price', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:items, platform:pl})});
-    var respData = await r.json();
+    var r = await fetch('/api/bulk-price', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:items, store_tier:st})});
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
     var h = '<div class="gd" style="margin-top:12px"><div class="sc"><div class="lb">Total Cost</div><div class="vl">$' + FMT(d.total_cost) + '</div></div><div class="sc"><div class="lb">Total Profit</div><div class="vl ' + (d.total_profit >= 0 ? 'g' : 'r') + '">' + (d.total_profit >= 0 ? '+' : '') + '$' + FMT(d.total_profit) + '</div></div><div class="sc"><div class="lb">Items</div><div class="vl">' + d.total_items + '</div></div></div>';
     if (d.results) {
       h += '<div style="margin-top:10px">';
       for (var i = 0; i < d.results.length; i++) {
         var it = d.results[i];
-        h += '<div class="lr"><span class="it" style="font-weight:600">' + it.name + '</span><span class="ip">$' + FMT(it.cost) + ' → $' + FMT(it.market_median) + '</span><span style="color:' + (it.net_profit >= 0 ? 'var(--g)' : 'var(--r)') + ';font-weight:700">' + (it.net_profit >= 0 ? '+' : '') + '$' + FMT(it.net_profit) + '</span><span style="font-size:.7rem">' + (it.verdict === 'BUY' ? '🔥' : '🚫') + '</span></div>';
+        h += '<div class="lr"><span class="it" style="font-weight:600">' + esc(it.name) + '</span><span class="ip">$' + FMT(it.cost) + ' → $' + FMT(it.market_median) + '</span><span style="color:' + (it.net_profit >= 0 ? 'var(--g)' : 'var(--r)') + ';font-weight:700">' + (it.net_profit >= 0 ? '+' : '') + '$' + FMT(it.net_profit) + '</span><span style="font-size:.7rem">' + (it.verdict === 'BUY' ? '🔥' : '🚫') + '</span></div>';
       }
       h += '</div>';
     }
@@ -1029,13 +1039,15 @@ D('bulkGo').onclick = async function() {
   } catch(e) { D('bulkRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
   D('bulkGo').textContent = '⚡ Price All';
 };
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-// ═══ DASHBOARD ═══
+// Dashboard
 async function loadDash() {
   if (!token) { D('dashStats').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
   try {
     var r = await fetch('/api/dashboard?token=' + getToken());
-    var respData = await r.json();
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
     D('dashStats').innerHTML = '<div class="sc"><div class="lb">Total Deals</div><div class="vl">' + d.total_deals + '</div><div class="sm">$' + FMT(d.total_invested) + ' invested</div></div><div class="sc"><div class="lb">Net Profit</div><div class="vl ' + (d.total_net_profit >= 0 ? 'g' : 'r') + '">' + (d.total_net_profit >= 0 ? '+' : '') + '$' + FMT(d.total_net_profit) + '</div><div class="sm">' + d.total_roi + '% ROI</div></div><div class="sc"><div class="lb">Avg Score</div><div class="vl">' + FMT(d.avg_flip_score) + '/100</div></div><div class="sc"><div class="lb">Inventory</div><div class="vl">' + (d.inventory.total_items || 0) + '</div><div class="sm">$' + FMT(d.inventory.sold_profit || 0) + ' sold profit</div></div>';
     if (d.categories && Object.keys(d.categories).length) {
       D('dashCats').innerHTML = '<h3 style="margin-top:14px">📂 By Category</h3><div class="gd">' + Object.keys(d.categories).map(function(c) { return '<div class="sc"><div class="lb">' + c + '</div><div class="vl">' + d.categories[c] + '</div></div>'; }).join('') + '</div>';
@@ -1044,24 +1056,35 @@ async function loadDash() {
 }
 D('dashRef').onclick = loadDash;
 
-// ═══ WHAT'S HOT ═══
+// What's Hot
 async function loadHot() {
   try {
     var items = await fetch('/api/whats-hot').then(function(r) { return r.json(); });
     if (!items || !items.length) { D('hotFeed').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No hot items yet.</div>'; return; }
-    D('hotFeed').innerHTML = items.map(function(it) {
+    D('hotFeed').innerHTML = '';
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
       var vIcon = it.volume_trend === 'accelerating' ? '📈' : (it.volume_trend === 'slowing' ? '📉' : '→');
-      return '<div class="lr" style="cursor:pointer" data-q="' + it.query + '" class="lr trend-click" style="cursor:pointer"><span style="font-size:1.2rem">🔥</span><span class="it" style="font-weight:600">' + it.query + '</span><span class="ip">$' + FMT(it.market_median) + '</span><span style="font-size:.7rem;color:var(--t2)">' + vIcon + ' ' + it.watchers + ' watching</span><span style="color:' + (it.flip_score >= 70 ? 'var(--g)' : (it.flip_score >= 50 ? 'var(--am)' : 'var(--r)')) + ';font-weight:700;font-size:.8rem">' + it.flip_score + '/100</span></div>';
-    }).join('');
+      var row = EL('div', 'lr', D('hotFeed'));
+      row.style.cursor = 'pointer';
+      row.setAttribute('data-q', it.query);
+      row.onclick = (function(q) { return function() { D('q').value = q; showPage('search'); search(); }; })(it.query);
+      EL('span', '', row).textContent = '🔥';
+      var tit = EL('span', 'it', row); tit.style.fontWeight = '600'; TXT(tit, it.query);
+      var ip = EL('span', 'ip', row); TXT(ip, '$' + FMT(it.market_median));
+      var meta = EL('span', '', row); meta.style.cssText = 'font-size:.7rem;color:var(--t2)'; TXT(meta, vIcon + ' ' + it.watchers + ' watching');
+      var score = EL('span', '', row); score.style.cssText = 'color:' + (it.flip_score >= 70 ? 'var(--g)' : (it.flip_score >= 50 ? 'var(--am)' : 'var(--r)')) + ';font-weight:700;font-size:.8rem'; TXT(score, it.flip_score + '/100');
+    }
   } catch(e) { D('hotFeed').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
 
-// ═══ TRUE ROI ═══
+// True ROI
 D('roiCalc').onclick = async function() {
   var b = {
     buy_price: parseFloat(D('roiBuy').value) || 0,
     sell_price: parseFloat(D('roiSell').value) || 0,
-    platform: D('roiPlat').value,
+    category: D('roiCat').value || 'default',
+    store_tier: D('roiSt').value || 'none',
     shipping_materials: parseFloat(D('roiShip').value) || 0,
     gas: parseFloat(D('roiGas').value) || 0,
     storage: parseFloat(D('roiStorage').value) || 0,
@@ -1072,82 +1095,13 @@ D('roiCalc').onclick = async function() {
   if (!b.buy_price || !b.sell_price) return;
   try {
     var r = await fetch('/api/true-roi', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
-    var respData = await r.json();
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
     D('roiRes').innerHTML = '<div class="cd" style="margin-top:12px"><h3>' + (d.final_net >= 0 ? '✅ ' + d.verdict : '❌ ' + d.verdict) + '</h3><div class="gd"><div class="sc"><div class="lb">Net After Fees</div><div class="vl ' + (d.net_after_fees >= 0 ? 'g' : 'r') + '">' + (d.net_after_fees >= 0 ? '+' : '') + '$' + FMT(d.net_after_fees) + '</div></div><div class="sc"><div class="lb">Hidden Costs</div><div class="vl r">-$' + FMT(d.hidden_costs) + '</div><div class="sm">Gas/Storage/Time</div></div><div class="sc"><div class="lb">Taxes</div><div class="vl r">-$' + FMT(d.tax_amount) + '</div></div><div class="sc"><div class="lb">TRUE NET</div><div class="vl ' + (d.final_net >= 0 ? 'g' : 'r') + '" style="font-size:1.5rem">' + (d.final_net >= 0 ? '+' : '') + '$' + FMT(d.final_net) + '</div><div class="sm">' + d.final_margin + '% real margin</div></div></div></div>';
   } catch(e) { D('roiRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
 };
 
-// ═══ COMPETITOR LANDSCAPE + PLATFORM OPT + SHARE buttons on search =======
-// Add after renderAll completes: competitor info
-async function loadCompetitor(q) {
-  if (!q) return;
-  try {
-    var r = await fetch('/api/competitor-landscape?q=' + encodeURIComponent(q));
-    var respData = await r.json();
-    if (d.error) return;
-    var cont = D('competitorCard');
-    if (!cont) return;
-    cont.style.display = '';
-    cont.innerHTML = '<h3>🏪 Competitor Landscape</h3><div class="gd" style="margin-top:8px"><div class="sc"><div class="lb">Active Sellers</div><div class="vl">' + d.total_active + '</div></div><div class="sc"><div class="lb">Recent Sales</div><div class="vl">' + d.total_sold + '</div></div><div class="sc"><div class="lb">Avg Days to Sell</div><div class="vl">' + FMT(d.avg_days_to_sell) + 'd</div></div></div>';
-    if (d.lowest_3 && d.lowest_3.length) {
-      cont.innerHTML += '<div style="font-size:.75rem;color:var(--t2);margin-top:6px">⬇ Lowest: ' + d.lowest_3.map(function(l){ return '$' + FMT(l.price); }).join(', ') + '</div>';
-    }
-  } catch(e) {}
-}
-
-
-// ═══ PHOTO GALLERY ═══
-async function loadPhotos() {
-  if (!data || !data.query) return;
-  var pg = D('photoGallery');
-  if (!pg) return;
-  var fc = data.active_filter_condition || 'all';
-  pg.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📷 Loading listing photos...</div>';
-  try {
-    var r = await fetch('/api/photos?q=' + encodeURIComponent(data.query) + '&condition=' + encodeURIComponent(fc) + '&limit=8');
-    var photos = await r.json();
-    if (!photos.photos || !photos.photos.length) { pg.innerHTML = ''; return; }
-    pg.innerHTML = '<h3 style="font-size:.95rem;margin-bottom:10px">📷 Recent Sold Photos <span style="font-size:.7rem;color:var(--t2);font-weight:400">— ' + esc(data.query) + ' (' + CL(fc) + ')</span></h3><div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:8px">' + photos.photos.map(function(p) {
-      return '<a href="' + esc(p.url) + '" target="_blank" style="flex-shrink:0;text-decoration:none"><div style="background:var(--bg);border:1px solid var(--b);border-radius:var(--rs);overflow:hidden;width:140px"><img src="' + esc(p.image) + '" alt="" style="width:100%;height:100px;object-fit:contain;background:#000" onerror="this.style.display=\'none\'"><div style="padding:6px 8px;font-size:.65rem;color:var(--t)">' + esc(p.title||'').substring(0,60) + '</div><div style="padding:0 8px 6px;font-size:.7rem;font-weight:700;color:var(--g)">' + (p.price ? '$' + p.price.toFixed(2) : '') + '</div></div></a>';
-    }).join('') + '</div>';
-  } catch(e) { pg.innerHTML = ''; }
-}
-function esc(s) { var d = document.createElement('div'); d.textContent = s||''; return d.innerHTML; }
-
-// Add competitor card + platform optimizer after flip data loads
-function addPostSearchCards(res, d) {
-  // Competitor landscape
-  var compCard = EL('div', 'cd', res);
-  compCard.id = 'competitorCard';
-  fetch('/api/competitor-landscape?q=' + encodeURIComponent(d.query))
-    .then(function(r) { return r.json(); })
-    .then(function(cd) {
-      if (cd.error) return;
-      compCard.innerHTML = '<h3>🏪 Competitor Landscape</h3><div class="gd" style="margin-top:8px"><div class="sc"><div class="lb">Active</div><div class="vl">' + cd.total_active + '</div><div class="sm">' + cd.total_sold + ' sold</div></div><div class="sc"><div class="lb">Days to Sell</div><div class="vl">' + FMT(cd.avg_days_to_sell) + 'd</div></div></div>';
-    }).catch(function(){});
-
-  // Platform optimizer (only if user entered a buy price)
-  if (d.flip_analysis && d.flip_analysis.user_buy_price_used) {
-    var optCard = EL('div', 'cd', res);
-    optCard.innerHTML = '<h3>📱 Platform Comparison</h3><div class="sb">Finding best platform...</div>';
-    fetch('/api/platform-optimize?q=' + encodeURIComponent(d.query) + '&buy_price=' + (d.flip_analysis.potential_buy_price || 0))
-      .then(function(r) { return r.json(); })
-      .then(function(pd) {
-        if (pd.platforms) {
-          optCard.innerHTML = '<h3>📱 Platform Comparison</h3><div class="gd">' + pd.platforms.map(function(p) {
-            return '<div class="sc"><div class="lb">' + p.platform + (p.recommended ? ' ⭐' : '') + '</div><div class="vl ' + (p.net_profit >= 0 ? 'g' : 'r') + '" style="font-size:1rem">' + (p.net_profit >= 0 ? '+' : '') + '$' + FMT(p.net_profit) + '</div><div class="sm">~' + FMT(p.days_to_sell) + 'd</div></div>';
-          }).join('') + '</div>';
-        }
-      }).catch(function(){});
-  }
-}
-
-document.addEventListener("click",function(e){var el=e.target.closest(".trend-click");if(!el)return;var q=el.getAttribute("data-q");if(q){D("q").value=q;showPage("search");search()}});
-
-// ═══ CONDITION GO BUTTON ═══
-D('condGo').onclick = function() { search(); };
-
-// ═══ PHOTO UPLOAD ═══
+// Photo Upload
 var lastPhotoFile = null;
 D('camBtn').onclick = function() { D('photoInput').click(); };
 D('photoInput').onchange = function() {
@@ -1160,27 +1114,20 @@ D('photoInput').onchange = function() {
     D('photoPreview').style.display = 'block';
     D('photoDesc').value = '🔄 Analyzing image...';
     D('photoDesc').disabled = true;
-    D('photoDesc').placeholder = 'Describe the item...';
     SHOW('photoOv');
-    
-    // Send to AI for identification
     var fd = new FormData();
     fd.append('image', file);
     fetch('/api/identify', {method:'POST', body:fd})
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if (d.description && !d.error) {
-          D('photoDesc').value = d.description;
-        } else {
-          D('photoDesc').value = '';
-          D('photoDesc').placeholder = 'Describe the item...';
-        }
         D('photoDesc').disabled = false;
+        if (d.description && !d.error) D('photoDesc').value = d.description;
+        else { D('photoDesc').value = ''; D('photoDesc').placeholder = 'Describe the item...'; }
       })
       .catch(function(){
+        D('photoDesc').disabled = false;
         D('photoDesc').value = '';
         D('photoDesc').placeholder = 'Describe the item...';
-        D('photoDesc').disabled = false;
       });
   };
   reader.readAsDataURL(file);
@@ -1190,20 +1137,16 @@ D('photoCancel').onclick = function() { HIDE('photoOv'); };
 D('photoOv').onclick = function(e) { if (e.target === D('photoOv')) HIDE('photoOv'); };
 D('photoSearchBtn').onclick = function() {
   var desc = D('photoDesc').value.trim();
-  if (!desc || desc === '🔄 Analyzing image...') { return; }
-  HIDE('photoOv');
-  D('q').value = desc;
-  search();
+  if (!desc || desc === '🔄 Analyzing image...') return;
+  HIDE('photoOv'); D('q').value = desc; search();
 };
 
-// ═══ VOICE INPUT ═══
+// Voice Input
 var recognition = null;
 if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   recognition = new SR();
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
+  recognition.continuous = false; recognition.interimResults = true; recognition.lang = 'en-US';
   recognition.onresult = function(e) {
     var t = '';
     for (var i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
@@ -1217,21 +1160,19 @@ D('micBtn').onclick = function() {
   if (!recognition) { alert('Voice input requires Chrome or Edge.'); return; }
   try {
     recognition.start();
-    D('micBtn').textContent = '🔴';
-    D('micBtn').style.background = 'rgba(248,113,113,.2)';
+    D('micBtn').textContent = '🔴'; D('micBtn').style.background = 'rgba(248,113,113,.2)';
     if (D('vst')) { D('vst').textContent = '🎤 Listening...'; D('vst').style.display = 'block'; }
   } catch(e) {}
 };
 
-// ═══ BARCODE SCANNER ═══
+// Barcode Scanner
 var scanStream = null;
 var barcodeDetector = null;
 if ('BarcodeDetector' in window) {
   barcodeDetector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
 }
 D('scanBtn').onclick = async function() {
-  SHOW('scanOv');
-  D('scanSt').textContent = 'Starting camera...';
+  SHOW('scanOv'); D('scanSt').textContent = 'Starting camera...';
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
     D('scanVid').srcObject = scanStream;
@@ -1248,10 +1189,7 @@ function detectLoop() {
   barcodeDetector.detect(D('scanVid')).then(function(barcodes) {
     if (barcodes.length > 0) {
       var code = barcodes[0].rawValue;
-      D('scanSt').textContent = 'Found: ' + code;
-      stopScan();
-      lookupBarcode(code);
-      return;
+      D('scanSt').textContent = 'Found: ' + code; stopScan(); lookupBarcode(code); return;
     }
     if (scanStream) requestAnimationFrame(detectLoop);
   }).catch(function() { if (scanStream) requestAnimationFrame(detectLoop); });
@@ -1259,33 +1197,22 @@ function detectLoop() {
 async function lookupBarcode(code) {
   try {
     var r = await fetch('/api/barcode?code=' + code);
-    var respData = await r.json();
+    var d = await r.json();
     D('qd').value = d.title ? (d.brand ? d.brand + ' ' + d.title : d.title) : code;
     setTimeout(rqd, 500);
   } catch(e) { D('qd').value = code; setTimeout(rqd, 500); }
 }
 
-console.log('PriceSpy v17 ready — pure DOM, no Jinja2, no paren bugs');
-setTimeout(function() { search(); }, 600);
+console.log('PriceSpy eBay-only ready');
 
-// Register Service Worker for PWA
+// Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('/static/sw.js')
-      .then(function(registration) {
-        console.log('ServiceWorker registered:', registration.scope);
-      })
-      .catch(function(err) {
-        console.log('ServiceWorker registration failed:', err);
-      });
+      .then(function(reg) { console.log('SW registered:', reg.scope); })
+      .catch(function(err) { console.log('SW failed:', err); });
   });
 }
 </script>
-<!-- Barcode Scan Overlay -->
-<div class="ov" id="scanOv"><div class="ovc"><h3>📷 Scan Barcode</h3>
-<video id="scanVid" autoplay playsinline style="width:100%;border-radius:var(--rs);background:#000;max-height:260px;object-fit:cover"></video>
-<div id="scanSt" style="text-align:center;padding:12px;font-size:.9rem;color:var(--t2)">Point camera at a barcode</div>
-<button class="bt bt-g" style="width:100%" onclick="stopScan()">Cancel</button></div></div>
 </body>
 </html>
-<!-- deployed Wed Jun 17 21:17:01 UTC 2026 -->

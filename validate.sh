@@ -3,7 +3,7 @@
 FILE="$1"
 echo "=== Validating $FILE ==="
 
-# 1. Check for bare English words in JS section
+# 1. Extract JS section
 JS_START=$(grep -n '<script>' "$FILE" | head -1 | cut -d: -f1)
 JS_END=$(grep -n '</script>' "$FILE" | tail -1 | cut -d: -f1)
 sed -n "${JS_START},${JS_END}p" "$FILE" > /tmp/js_check.txt
@@ -17,16 +17,19 @@ if [ "$OPEN" -ne "$CLOSE" ]; then
 fi
 echo "✅ Parens balanced ($OPEN)"
 
-
-# 4. Check for common patterns that break JS
-if grep -q "onclick=.*D('[a-z]*').*'" "$FILE"; then
-    echo "⚠️ Potential onclick quote issue (D('...') inside double quotes)"
-fi
-
-# 5. Check console.log is valid
-if grep -q "console.log('.*$" /tmp/js_check.txt; then
-    echo "❌ Unterminated console.log string"
+# 3. Check curly braces balance
+OBRACE=$(grep -o '{' /tmp/js_check.txt | wc -l)
+CBRACE=$(grep -o '}' /tmp/js_check.txt | wc -l)
+if [ "$OBRACE" -ne "$CBRACE" ]; then
+    echo "❌ BRACES UNBALANCED: $OBRACE open, $CBRACE close (diff: $((OBRACE - CBRACE)))"
     exit 1
+fi
+echo "✅ Braces balanced ($OBRACE)"
+
+# 4. Check for console.log lines that may be unterminated (actual unterminated string, not false positive)
+if grep -E "console\.log\(['\"].*)" /tmp/js_check.txt | grep -vE "console\.log\(['\"][^'\"]*['\"].*\);" | grep -vE "console\.log\(['\"][^'\"]*['\"],.*\);" >/dev/null; then
+    # This is a heuristic; don't fail automatically because template literals and multiline strings exist.
+    echo "⚠️ Some console.log lines look suspicious — review manually"
 fi
 
 echo "✅ Validation passed"

@@ -6,6 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 <style>
 :root,[data-theme=dark]{--bg:#0f1117;--s:#1a1d27;--s2:#22252f;--b:#2a2d38;--t:#e8eaed;--t2:#9aa0a6;--a:#5b8def;--g:#34d399;--r:#f87171;--am:#fbbf24;--p:#a78bfa;--rad:12px;--rs:8px}
+[data-theme=light]{--bg:#f5f5f7;--s:#fff;--s2:#f0f0f3;--b:#dcdce0;--t:#1c1c1e;--t2:#6c6c74;--a:#2563eb;--g:#059669;--r:#dc2626;--am:#d97706;--p:#7c3aed}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--t);min-height:100vh;line-height:1.6}
 header{background:var(--s);border-bottom:1px solid var(--b);padding:10px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
@@ -69,7 +70,7 @@ h1{font-size:1.8rem;font-weight:800;margin-bottom:8px;background:linear-gradient
 
 <div class="cd" id="overview">
 <h2><span class="icon">📋</span> Overview</h2>
-<p>PriceSpy is a price research tool designed for resellers and flippers. We use the eBay Browse API to provide real-time pricing data including sold listings, active listings, fees, and liquidity metrics.</p>
+<p>PriceSpy is an eBay-focused price research tool designed for resellers and flippers. We use the eBay Browse API, Finding API, and Taxonomy API to provide real-time pricing data including sold listings, active listings, fees, and liquidity metrics.</p>
 <p>This policy explains what data PriceSpy accesses from eBay, what user information we store, and how we comply with eBay's developer requirements for privacy and data handling.</p>
 <div class="highlight">
 <strong>eBay Compliance:</strong> PriceSpy is committed to transparency about data access and handling in accordance with eBay's API Terms of Use and Developer Program policies.
@@ -78,17 +79,18 @@ h1{font-size:1.8rem;font-weight:800;margin-bottom:8px;background:linear-gradient
 
 <div class="cd" id="data-access">
 <h2><span class="icon">🔍</span> Data Access from eBay</h2>
-<p>When you use PriceSpy, we access the following information from eBay's API:</p>
+<p>When you use PriceSpy, we access the following public information from eBay's APIs:</p>
 <ul>
 <li><strong>Public Listing Data:</strong> Item titles, descriptions, prices, conditions, and images from eBay listings</li>
 <li><strong>Sold Listing Information:</strong> Historical sales data including final prices, sale dates, and item conditions</li>
+<li><strong>Active Listings:</strong> Current prices, shipping costs, and buying options</li>
 <li><strong>Pricing Metrics:</strong> Market values, price ranges, and pricing trends based on aggregated listing data</li>
-<li><strong>Category Information:</strong> Product categories and item specifics to improve search accuracy</li>
+<li><strong>Category Information:</strong> eBay category suggestions and product categories to improve search accuracy and fee calculations</li>
 <li><strong>Liquidity Data:</strong> Average days to sell, sales velocity, and competition metrics</li>
 </ul>
-<p>We do <strong>not</strong> access your eBay account information, login credentials, personal messages, or any private user data from eBay.</p>
+<p>We do <strong>not</strong> access your eBay account messages, private user data, or buyer/seller transaction details beyond what is publicly available in completed listings.</p>
 <div class="highlight-box">
-<strong>Public Data Only:</strong> PriceSpy only accesses publicly available listing information from eBay. We do not store your eBay username, password, or any authentication credentials.
+<strong>Public Data Only:</strong> PriceSpy only accesses publicly available listing information from eBay. We do not store your eBay username, password, or any eBay authentication credentials unless you explicitly choose to connect your eBay seller account via OAuth.
 </div>
 </div>
 
@@ -100,10 +102,10 @@ h1{font-size:1.8rem;font-weight:800;margin-bottom:8px;background:linear-gradient
 <li><strong>Search History:</strong> Your recent searches to provide personalized recommendations and faster access to previous queries</li>
 <li><strong>Watchlists:</strong> Items you're tracking for price changes and market analysis</li>
 <li><strong>Inventory Lists:</strong> Items you're tracking for your resale business</li>
-<li><strong>Account Settings:</strong> Preferences and configuration options</li>
+<li><strong>Account Settings:</strong> Preferences such as eBay store tier and default shipping cost</li>
 </ul>
 <div class="warning-box">
-<strong>No eBay Account Details:</strong> We do not collect or store your eBay username, eBay password, eBay authentication tokens, or any eBay account-specific information.
+<strong>No eBay Account Details:</strong> We do not collect or store your eBay password. If you connect your eBay seller account, we receive OAuth tokens from eBay directly and store them securely with your consent.
 </div>
 </div>
 
@@ -121,7 +123,7 @@ h1{font-size:1.8rem;font-weight:800;margin-bottom:8px;background:linear-gradient
 
 <div class="cd" id="account-deletion">
 <h2><span class="icon">🗑️</span> Account &amp; Data Deletion</h2>
-<p>If you wish to delete your PriceSpy account and all associated data, we provide the following options:</p>
+<p>If you wish to delete your PriceSpy account and all associated data:</p>
 
 <h3 style="font-size:1rem;margin:16px 0 8px">Request Account Deletion</h3>
 <p>To request complete deletion of your PriceSpy account and all stored data:</p>
@@ -131,11 +133,10 @@ h1{font-size:1.8rem;font-weight:800;margin-bottom:8px;background:linear-gradient
 </div>
 
 <h3 style="font-size:1rem;margin:16px 0 8px">eBay Marketplace Account Deletion</h3>
-<p>If you have linked your eBay account or have concerns about data shared through eBay's APIs, you can manage your eBay data preferences directly through eBay's platform.</p>
 <p>For questions about how eBay handles your data, please visit <a href="https://www.ebay.com" target="_blank" rel="noopener" style="color:var(--a)">eBay's Privacy Center</a>.</p>
 
 <div class="highlight">
-<strong>eBay Webhook Compliance:</strong> PriceSpy maintains a webhook endpoint at <code style="background:var(--bg);padding:2px 6px;border-radius:4px">/ebay/account-deletion</code> to receive account deletion notifications from eBay, as required by their Developer Program policies. This endpoint only processes eBay's official notifications and does not affect user account data stored in PriceSpy.
+<strong>eBay Webhook Compliance:</strong> PriceSpy maintains a webhook endpoint at <code style="background:var(--bg);padding:2px 6px;border-radius:4px">/ebay/account-deletion</code> to receive account deletion notifications from eBay, as required by their Developer Program policies. This endpoint only processes eBay's official notifications.
 </div>
 </div>
 
@@ -156,7 +157,7 @@ h1{font-size:1.8rem;font-weight:800;margin-bottom:8px;background:linear-gradient
 </ul>
 </div>
 
-<p class="last-updated">Last updated: June 2024</p>
+<p class="last-updated">Last updated: June 2026</p>
 </main>
 
 </body>

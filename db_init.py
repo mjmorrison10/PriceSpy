@@ -21,7 +21,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS watchlist (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, query TEXT,
             condition_filter TEXT DEFAULT 'all', buy_price REAL DEFAULT 0,
-            platform TEXT DEFAULT 'ebay', shipping_cost REAL DEFAULT 0,
+            platform TEXT DEFAULT 'ebay', store_tier TEXT DEFAULT 'none', shipping_cost REAL DEFAULT 0,
             last_median REAL, last_low REAL, last_high REAL,
             last_score INTEGER, last_checked TIMESTAMP,
             price_change_pct REAL DEFAULT 0, alert_enabled INTEGER DEFAULT 1,
@@ -56,6 +56,12 @@ def init_db():
         );
     """)
     conn.commit()
+    # Migration: add store_tier column if missing
+    try:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN store_tier TEXT DEFAULT 'none'")
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
 init_db()
