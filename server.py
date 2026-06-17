@@ -1527,6 +1527,105 @@ def _scrape_ebay_sold(query: str, condition: str = "all", limit: int = 60) -> li
     return sold_items
 
 
+def _scrape_ebay_active(query: str, condition: str = "all", limit: int = 40) -> list[dict]:
+    """Get real active listings from eBay Browse API."""
+    token = _get_ebay_token()
+    if not token:
+        print("⚠️ No eBay API credentials - cannot fetch active listings")
+        return []
+    
+    active_items = []
+    
+    # Build filter for active items only (not sold)
+    filter_parts = ["soldItemOnly:false"]
+    
+    # Map our conditions to eBay condition IDs
+    cond_map = {
+        "new (sealed)": ["NEW"],
+        "new": ["NEW"],
+        "like new": ["OPEN_BOX", "LIKE_NEW"],
+        "very good": ["VERY_GOOD", "EXCELLENT"],
+        "good": ["GOOD"],
+        "acceptable": ["ACCEPTABLE"],
+        "for parts": ["PARTS_ONLY", "FOR_PARTS"],
+    }
+    
+    if condition != "all" and condition in cond_map:
+        cond_ids = ",".join(cond_map[condition])
+        filter_parts.append(f"conditionIds:{{{cond_ids}}}")
+    
+    # Only show items with "Buy It Now" or best offer
+    filter_parts.append("buyingOptions:{FIXED_PRICE}")
+    
+    filters = ",".join(filter_parts)
+    
+    # eBay Browse API endpoint for active listings
+    url = f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search"
+    params = {
+        "q": query,
+        "filter": filters,
+        "limit": str(min(limit, 50)),
+        "sort": "price asc",
+    }
+    
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        r = SESSION.get(url, params=params, headers=headers, timeout=20)
+        
+        if r.status_code == 401:
+            print("⚠️ eBay API auth expired")
+            return []
+        elif r.status_code != 200:
+            print(f"eBay API error: {r.status_code} - {r.text[:200]}")
+            return []
+        
+        data = r.json()
+        items = data.get("itemSummaries", [])
+        
+        for item in items:
+            price_info = item.get("price", {})
+            price = float(price_info.get("value", 0))
+            
+            # Get shipping cost
+            shipping_info = item.get("shippingOptions", [{}])[0] if item.get("shippingOptions") else {}
+            shipping_cost = 0.0
+            if shipping_info:
+                ship_price = shipping_info.get("shippingCost", {})
+                if ship_price.get("value"):
+                    shipping_cost = float(ship_price.get("value", 0))
+            
+            if price <= 0:
+                continue
+            
+            # Map eBay condition to our format
+            ebay_cond = item.get("condition", "")
+            our_cond = "good"
+            for k, v in cond_map.items():
+                if ebay_cond in v:
+                    our_cond = k
+                    break
+            
+            # Get listing type (auction or buy it now)
+            buying_options = item.get("buyingOptions", [])
+            is_auction = "AUCTION" in buying_options
+            
+            active_items.append({
+                "title": item.get("title", ""),
+                "price": price,
+                "shipping": shipping_cost,
+                "url": item.get("itemWebUrl", ""),
+                "condition": our_cond,
+                "is_auction": is_auction,
+            })
+        
+        print(f"✅ eBay API returned {len(active_items)} active listings")
+        
+    except Exception as e:
+        print(f"⚠️ eBay active listings API failed: {e}")
+    
+    return active_items
+
+
 def _parse_ebay_sold_page(url: str, limit: int) -> list[dict]:
     """Parse eBay sold results page (fallback for when API is unavailable)."""
     try:
@@ -1627,18 +1726,20 @@ def _get_market_value(query: str, condition: str = "all") -> dict:
     2. AI estimation (Gemini)
     3. Category baselines (fallback)
     
-    Returns: {low, median, high, source, confidence, items, sold_count, note}
+    Returns: {low, median, high, source, confidence, items, sold_count, note, active_items}
     """
     result = {
         "low": 0, "median": 0, "high": 0,
         "p10": 0, "p90": 0, "mean": 0,
         "source": "none", "confidence": "none",
-        "items": [], "sold_count": 0, "note": ""
+        "items": [], "sold_count": 0, "note": "",
+        "active_items": []
     }
     
     # TIER 1: Try eBay API (highest priority)
     if EBAY_CLIENT_ID and EBAY_CLIENT_SECRET:
         items = _scrape_ebay_sold(query, condition, limit=60)
+        active_items = _scrape_ebay_active(query, condition, limit=40)
         if len(items) >= 5:
             stats = _compute_stats(items)
             return {
@@ -1646,6 +1747,7 @@ def _get_market_value(query: str, condition: str = "all") -> dict:
                 "source": f"eBay Sold Data ({len(items)} items)",
                 "confidence": "high",
                 "items": items[:10],
+                "active_items": active_items[:10],
                 "sold_count": len(items),
                 "note": "Real sold prices from eBay"
             }
@@ -1677,6 +1779,7 @@ def _get_market_value(query: str, condition: str = "all") -> dict:
                 "source": "AI Estimation (Gemini)",
                 "confidence": "medium",
                 "items": synthetic_items,
+                "active_items": [],
                 "sold_count": 0,
                 "note": f"AI estimate: {ai_result.get('reasoning', 'Based on public market data')}"
             }
@@ -1712,6 +1815,7 @@ def _get_market_value(query: str, condition: str = "all") -> dict:
         "source": f"Category Estimate ({cat})",
         "confidence": "low",
         "items": synthetic_items,
+        "active_items": [],
         "sold_count": 0,
         "note": "No real sales data. Use verification links below."
     }
@@ -1738,12 +1842,16 @@ def _do_search(q: str, period_days: int, period: str,
     # ── Use tiered market value lookup ──
     market_data = _get_market_value(q, filter_condition if filter_condition and filter_condition != "all" else "very good")
     sold_items = market_data.get("items", [])
+    real_active_items = market_data.get("active_items", [])
     data_source = market_data.get("source", f"Smart Estimate ({cat})")
     confidence = market_data.get("confidence", "low")
     market_note = market_data.get("note", "")
     
-    # Generate active listings based on market data
-    if sold_items:
+    # Use real active listings if available, otherwise generate based on market data
+    if real_active_items:
+        active_items = real_active_items
+    elif sold_items:
+        # Generate active listings based on market data (only if no real data)
         sold_stats = _compute_stats(sold_items)
         base_active = sold_stats.get("median", cat_med) * 1.06
         import random
