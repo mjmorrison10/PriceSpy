@@ -788,6 +788,7 @@ def _compute_stats(items: list[dict]) -> dict:
     prices = [it.get("price", 0) for it in items if it.get("price") and it.get("price") > 0.01]
     if not prices:
         return {"low": 0, "p10": 0, "median": 0, "p90": 0, "high": 0, "mean": 0, "count": 0}
+    prices = [p for p in prices if p is not None]
     prices.sort()
     n = len(prices)
     median = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2
