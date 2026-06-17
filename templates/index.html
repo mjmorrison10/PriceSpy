@@ -86,6 +86,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <button class="pil" data-pg="roi">💵</button>
 <button class="pil" data-pg="promoted">📢</button>
 <button class="pil" data-pg="seller">🏪</button>
+<button class="pil" data-pg="title">✍️</button>
 <button class="pil" id="navAuth">👤</button>
 <a href="/policy" class="pil" style="margin-left:4px">📜</a>
 <button class="pil" id="navTheme">🌙</button>
@@ -175,6 +176,12 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="rw mb1"><button class="bt bt-p" id="sellerConnect">🔗 Connect eBay</button><button class="bt bt-g" id="sellerDisconnect" style="display:none">🚫 Disconnect</button><button class="bt bt-g" id="sellerRefresh" style="display:none">🔄 Refresh</button></div>
 <div id="sellerStatus" style="font-size:.78rem;color:var(--t2);margin-bottom:12px"></div>
 <div class="gd" id="sellerStats"></div><div id="sellerInv"></div><div id="sellerSold"></div></div></div>
+
+<!-- TITLE OPTIMIZER -->
+<div class="pg" id="pg-title"><div class="cd"><h2>✍️ eBay Title Optimizer</h2><div class="sb">Analyze top-selling eBay titles and get a keyword-optimized title.</div>
+<div class="rw"><div class="f1"><input type="text" id="toq" placeholder='Item, e.g. "iPhone 15 Pro 256GB"'></div><select id="tocond" style="width:150px"><option value="all">All Conditions</option><option value="new">New</option><option value="used">Used</option><option value="very_good">Very Good</option><option value="good">Good</option><option value="acceptable">Acceptable</option></select></div>
+<div class="rw mt1"><input type="text" id="tocur" placeholder="Your current title (optional)" style="flex:1"><button class="bt bt-p" id="toGo">Optimize</button></div>
+<div id="toRes" class="mt1"></div></div></div>
 
 <!-- TRENDING -->
 <div class="pg" id="pg-trending"><div class="cd"><h2>📊 Trending</h2><div class="sb">Anonymous. What other flippers are watching.</div><div id="tr"></div></div></div>
@@ -383,7 +390,7 @@ D('asub').onclick = async function() {
 };
 
 // Navigation
-var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi','promoted','seller'];
+var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi','promoted','seller','title'];
 function showPage(p) {
   for (var i = 0; i < PAGES.length; i++) {
     var pg = D('pg-' + PAGES[i]);
@@ -402,6 +409,7 @@ function showPage(p) {
   if (p === 'bulk') D('bulkRes').innerHTML = '';
   if (p === 'promoted') D('poRes').innerHTML = '';
   if (p === 'seller') loadSellerDashboard();
+  if (p === 'title') D('toRes').innerHTML = '';
 }
 var navEls = document.querySelectorAll('[data-pg]');
 for (var i = 0; i < navEls.length; i++) {
@@ -1192,6 +1200,64 @@ D('sellerDisconnect').onclick = async function() {
   loadSellerDashboard();
 };
 D('sellerRefresh').onclick = fetchSellerData;
+
+// ═══ TITLE OPTIMIZER ═══
+D('toGo').onclick = async function() {
+  var q = D('toq').value.trim();
+  var cond = D('tocond').value || 'all';
+  var cur = D('tocur').value.trim();
+  if (!q) return;
+  D('toGo').textContent = 'Optimizing...';
+  try {
+    var u = '/api/title-optimize?q=' + encodeURIComponent(q) + '&condition=' + cond;
+    if (cur) u += '&current_title=' + encodeURIComponent(cur);
+    var r = await fetch(u);
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    var res = D('toRes');
+    res.innerHTML = '';
+    var wrap = EL('div', 'cd', res);
+    wrap.style.cssText = 'border:2px solid var(--a);background:rgba(91,141,239,.08)';
+    var big = EL('div', '', wrap);
+    big.style.cssText = 'font-size:1.1rem;font-weight:700;color:var(--a);margin-bottom:8px';
+    TXT(big, '✨ Suggested Title');
+    var titleBox = EL('div', '', wrap);
+    titleBox.style.cssText = 'font-size:1.05rem;padding:12px;background:var(--bg);border-radius:var(--rs);border:1px solid var(--b);margin-bottom:12px;word-break:break-word';
+    titleBox.textContent = d.suggested_title;
+    var copyBtn = EL('button', 'bt bt-p', wrap);
+    TXT(copyBtn, '📋 Copy Title');
+    copyBtn.onclick = function() { navigator.clipboard.writeText(d.suggested_title); copyBtn.textContent = 'Copied!'; setTimeout(function(){ copyBtn.textContent = '📋 Copy Title'; }, 1500); };
+    var grid = EL('div', 'gd', wrap);
+    grid.style.marginTop = '12px';
+    addStatCard(grid, '📊 Suggested Score', d.suggested_score + '/100', 'Higher is better', d.suggested_score >= 70 ? 'g' : (d.suggested_score >= 40 ? 'am' : 'r'));
+    if (d.current_title) {
+      addStatCard(grid, '📊 Current Score', d.current_score + '/100', 'Your title', d.current_score >= 70 ? 'g' : (d.current_score >= 40 ? 'am' : 'r'));
+    }
+    addStatCard(grid, '🔑 Top Keywords', Object.keys(d.top_keywords).slice(0, 3).join(', '), Object.keys(d.top_keywords).length + ' found', '');
+    if (d.price_insights && d.price_insights.length) {
+      var pi = EL('div', 'cd', res);
+      EL('h3', '', pi).textContent = '💰 Keywords That Sell for More';
+      var piGrid = EL('div', 'gd', pi);
+      for (var i = 0; i < Math.min(d.price_insights.length, 4); i++) {
+        var kw = d.price_insights[i];
+        addStatCard(piGrid, '"' + kw.keyword + '"', '$' + FMT(kw.avg_price), kw.count + ' listings', 'g');
+      }
+    }
+    if (d.top_selling_titles && d.top_selling_titles.length) {
+      var top = EL('div', 'cd', res);
+      EL('h3', '', top).textContent = '🔥 Top Selling Titles';
+      for (var i = 0; i < d.top_selling_titles.length; i++) {
+        var t = d.top_selling_titles[i];
+        var row = EL('div', 'lr', top);
+        row.onclick = (function(u) { return function() { window.open(u, '_blank'); }; })(t.url || '#');
+        EL('span', 'it', row).textContent = t.title;
+        EL('span', 'ip', row).textContent = '$' + FMT(t.price);
+      }
+    }
+  } catch(e) { D('toRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
+  D('toGo').textContent = 'Optimize';
+};
+D('toq').onkeydown = D('tocur').onkeydown = function(e) { if (e.key === 'Enter') D('toGo').click(); };
 
 async function loadHot() {
   try {

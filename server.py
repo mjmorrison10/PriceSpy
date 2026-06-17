@@ -1123,6 +1123,127 @@ def api_promoted_optimize():
         "scenarios": results,
     })
 
+# ── Title Optimizer ────────────────────────────────────────────────────
+TITLE_STOP_WORDS = {
+    "the", "a", "an", "and", "or", "but", "for", "with", "without", "from", "to", "of", "in", "on", "at", "by",
+    "is", "are", "was", "were", "be", "been", "being", "it", "its", "this", "that", "these", "those", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "can", "shall", "about", "up", "out", "so", "if",
+    "new", "used", "good", "very", "excellent", "condition", "working", "tested", "untested", "parts", "only", "free", "shipping",
+    "fast", "quick", "sale", "sold", "listing", "item", "lot", "bundle", "includes", "include", "comes", "come", "please", "read",
+    "description", "details", "more", "info", "information", "see", "photos", "pictures", "pic", "image", "images", "view", "look",
+    "buy", "now", "today", "usd", "us", "ship", "ships", "shipped", "worldwide", "usa", "authentic", "genuine", "original", "official",
+    "box", "case", "manual", "cable", "charger", "adapter", "cord", "remote", "controller", "battery", "batteries", "strap", "cover",
+}
+
+def _extract_title_keywords(titles: list[str]) -> dict:
+    """Extract keyword frequency from eBay listing titles."""
+    counts = defaultdict(int)
+    bigrams = defaultdict(int)
+    for title in titles:
+        words = re.findall(r'[a-zA-Z0-9]+', title.lower())
+        # Filter
+        filtered = [w for w in words if len(w) > 1 and w not in TITLE_STOP_WORDS]
+        for w in filtered:
+            counts[w] += 1
+        for i in range(len(filtered) - 1):
+            bigram = filtered[i] + " " + filtered[i + 1]
+            bigrams[bigram] += 1
+    # Merge bigrams into counts if they appear frequently
+    for bg, c in bigrams.items():
+        if c >= 2:
+            counts[bg] = c
+    return dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))
+
+def _score_title(title: str, keywords: dict) -> int:
+    """Score a title based on how many high-frequency keywords it contains."""
+    if not title or not keywords:
+        return 0
+    tl = title.lower()
+    score = 0
+    max_freq = max(keywords.values()) if keywords else 1
+    for kw, freq in keywords.items():
+        if kw in tl:
+            score += int((freq / max_freq) * 100)
+    return min(100, score)
+
+def _build_optimized_title(query: str, current_title: str, keywords: dict) -> str:
+    """Build a title using the most valuable keywords, keeping it under 80 chars."""
+    # Start with the item name / query
+    base = query.strip()
+    used = set(base.lower().split())
+    parts = [base]
+    remaining = 80 - len(base) - 1
+    # Add top keywords that are not already in base
+    for kw, freq in keywords.items():
+        if remaining <= 0:
+            break
+        kw_clean = kw.strip()
+        # Skip if already covered by base words
+        if all(w in used for w in kw_clean.split()):
+            continue
+        if len(kw_clean) + 1 <= remaining:
+            parts.append(kw_clean)
+            used.update(kw_clean.split())
+            remaining -= (len(kw_clean) + 1)
+    title = " ".join(parts)
+    return title[:80]
+
+def _analyze_titles_for_insights(titles: list[str], prices: list[float]) -> list[dict]:
+    """Find keyword patterns that correlate with higher prices."""
+    if not titles or not prices or len(titles) != len(prices):
+        return []
+    keyword_prices = defaultdict(list)
+    for title, price in zip(titles, prices):
+        words = re.findall(r'[a-zA-Z0-9]+', title.lower())
+        seen = set()
+        for w in words:
+            if len(w) > 2 and w not in TITLE_STOP_WORDS and w not in seen:
+                keyword_prices[w].append(price)
+                seen.add(w)
+    insights = []
+    for kw, prices_list in keyword_prices.items():
+        if len(prices_list) < 3:
+            continue
+        avg = sum(prices_list) / len(prices_list)
+        insights.append({"keyword": kw, "avg_price": round(avg, 2), "count": len(prices_list)})
+    insights.sort(key=lambda x: x["avg_price"], reverse=True)
+    return insights[:10]
+
+@app.route("/api/title-optimize")
+def api_title_optimize():
+    """Suggest an optimized eBay title based on top-selling listings."""
+    q = request.args.get("q", "").strip()
+    current_title = request.args.get("current_title", "").strip()
+    condition = request.args.get("condition", "all").strip().lower()
+    if condition not in EBAY_COND and condition != "all":
+        condition = "all"
+    if not q:
+        return jsonify({"error": "Query required"}), 400
+    sold_items = _ebay_sold_listings(q, condition, limit=100)
+    if not sold_items:
+        return jsonify({"error": "No eBay sold listings found to analyze"}), 400
+    titles = [it.get("title", "") for it in sold_items]
+    prices = [it.get("price", 0) for it in sold_items]
+    keywords = _extract_title_keywords(titles)
+    top_keywords = dict(list(keywords.items())[:30])
+    suggested_title = _build_optimized_title(q, current_title, top_keywords)
+    current_score = _score_title(current_title, top_keywords) if current_title else 0
+    suggested_score = _score_title(suggested_title, top_keywords)
+    insights = _analyze_titles_for_insights(titles, prices)
+    top_titles = sorted(sold_items, key=lambda x: x.get("price", 0), reverse=True)[:5]
+    return jsonify({
+        "query": q,
+        "condition": condition,
+        "current_title": current_title or None,
+        "current_score": current_score,
+        "suggested_title": suggested_title,
+        "suggested_score": suggested_score,
+        "top_keywords": top_keywords,
+        "price_insights": insights,
+        "top_selling_titles": [{"title": it.get("title"), "price": it.get("price"), "url": it.get("url")} for it in top_titles],
+        "ebay_url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1&LH_Complete=1",
+    })
+
 @app.route("/api/quick-deal")
 def api_quick_deal():
     raw = request.args.get("input", "").strip()
