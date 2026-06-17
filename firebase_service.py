@@ -60,6 +60,9 @@ class StorageProvider:
     def get_trending_searches(self, limit: int = 20) -> list[dict]: ...
 
     def record_search(self, query: str, category: str) -> None: ...
+    def save_ebay_tokens(self, user_id: str, access_token_enc: str, refresh_token_enc: str, expires_at: float, scope: str) -> None: ...
+    def get_ebay_tokens(self, user_id: str) -> dict | None: ...
+    def delete_ebay_tokens(self, user_id: str) -> None: ...
     def get_inventory(self, user_id: str) -> list[dict]: ...
     def add_inventory_item(self, user_id: str, data: dict) -> str: ...
     def update_inventory_item(self, item_id: str, user_id: str, data: dict) -> None: ...
@@ -222,6 +225,51 @@ class SQLiteProvider(StorageProvider):
         conn.execute(
             "CREATE TABLE IF NOT EXISTS search_log (id INTEGER PRIMARY KEY AUTOINCREMENT, query TEXT, category TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         conn.execute("INSERT INTO search_log (query, category) VALUES (?,?)", (query, category))
+        conn.commit()
+        conn.close()
+
+    def save_ebay_tokens(self, user_id, access_token_enc, refresh_token_enc, expires_at, scope):
+        conn = self._connect()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ebay_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT UNIQUE,
+                access_token_enc TEXT, refresh_token_enc TEXT,
+                expires_at TIMESTAMP, scope TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            INSERT INTO ebay_tokens (user_id, access_token_enc, refresh_token_enc, expires_at, scope, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(user_id) DO UPDATE SET
+                access_token_enc=excluded.access_token_enc,
+                refresh_token_enc=excluded.refresh_token_enc,
+                expires_at=excluded.expires_at,
+                scope=excluded.scope,
+                updated_at=datetime('now')
+        """, (user_id, access_token_enc, refresh_token_enc, expires_at, scope))
+        conn.commit()
+        conn.close()
+
+    def get_ebay_tokens(self, user_id):
+        conn = self._connect()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ebay_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT UNIQUE,
+                access_token_enc TEXT, refresh_token_enc TEXT,
+                expires_at TIMESTAMP, scope TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        row = conn.execute("SELECT * FROM ebay_tokens WHERE user_id=?", (user_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+    def delete_ebay_tokens(self, user_id):
+        conn = self._connect()
+        conn.execute("DELETE FROM ebay_tokens WHERE user_id=?", (user_id,))
         conn.commit()
         conn.close()
 
@@ -445,6 +493,27 @@ class FirebaseProvider(StorageProvider):
             "query": query, "category": category,
             "created_at": firestore.SERVER_TIMESTAMP,
         })
+
+    def save_ebay_tokens(self, user_id, access_token_enc, refresh_token_enc, expires_at, scope):
+        self.db.collection("ebay_tokens").document(user_id).set({
+            "user_id": user_id,
+            "access_token_enc": access_token_enc,
+            "refresh_token_enc": refresh_token_enc,
+            "expires_at": expires_at,
+            "scope": scope,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        })
+
+    def get_ebay_tokens(self, user_id):
+        doc = self.db.collection("ebay_tokens").document(user_id).get()
+        if doc.exists:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            return data
+        return None
+
+    def delete_ebay_tokens(self, user_id):
+        self.db.collection("ebay_tokens").document(user_id).delete()
 
     def get_inventory(self, user_id):
         docs = self.db.collection("inventory").where("user_id", "==", user_id).order_by("updated_at", direction=firestore.Query.DESCENDING).stream()

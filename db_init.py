@@ -54,11 +54,32 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, query TEXT,
             category TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS ebay_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT UNIQUE,
+            access_token_enc TEXT, refresh_token_enc TEXT,
+            expires_at TIMESTAMP, scope TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     conn.commit()
     # Migration: add store_tier column if missing
     try:
         conn.execute("ALTER TABLE watchlist ADD COLUMN store_tier TEXT DEFAULT 'none'")
+        conn.commit()
+    except Exception:
+        pass
+    # Migration: add ebay_tokens table if missing
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ebay_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT UNIQUE,
+                access_token_enc TEXT, refresh_token_enc TEXT,
+                expires_at TIMESTAMP, scope TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
     except Exception:
         pass

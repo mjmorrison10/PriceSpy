@@ -85,6 +85,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <button class="pil" data-pg="hot">🔥</button>
 <button class="pil" data-pg="roi">💵</button>
 <button class="pil" data-pg="promoted">📢</button>
+<button class="pil" data-pg="seller">🏪</button>
 <button class="pil" id="navAuth">👤</button>
 <a href="/policy" class="pil" style="margin-left:4px">📜</a>
 <button class="pil" id="navTheme">🌙</button>
@@ -168,6 +169,12 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="rw"><div class="f1"><input type="text" id="poq" placeholder='e.g. "Nintendo Switch OLED"'></div><input type="number" id="pobp" placeholder="Buy price" step="0.01" style="width:100px"></div>
 <div class="rw mt1"><select id="post" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><input type="number" id="poship" placeholder="Ship cost" step="0.01" style="width:90px"><button class="bt bt-p" id="poGo">Optimize</button></div>
 <div id="poRes" class="mt1"></div></div></div>
+
+<!-- EBAY SELLER DASHBOARD -->
+<div class="pg" id="pg-seller"><div class="cd"><h2>🏪 eBay Seller Dashboard</h2><div class="sb">Connect your eBay seller account to see your inventory, sold orders, and revenue.</div>
+<div class="rw mb1"><button class="bt bt-p" id="sellerConnect">🔗 Connect eBay</button><button class="bt bt-g" id="sellerDisconnect" style="display:none">🚫 Disconnect</button><button class="bt bt-g" id="sellerRefresh" style="display:none">🔄 Refresh</button></div>
+<div id="sellerStatus" style="font-size:.78rem;color:var(--t2);margin-bottom:12px"></div>
+<div class="gd" id="sellerStats"></div><div id="sellerInv"></div><div id="sellerSold"></div></div></div>
 
 <!-- TRENDING -->
 <div class="pg" id="pg-trending"><div class="cd"><h2>📊 Trending</h2><div class="sb">Anonymous. What other flippers are watching.</div><div id="tr"></div></div></div>
@@ -328,8 +335,9 @@ D('logoutBtn').onclick = function() {
   HIDE('accountOv');
 };
 D('connectEbayBtn').onclick = async function() {
+  if (!token) { alert('Login first to connect your eBay seller account.'); return; }
   try {
-    var r = await fetch('/api/ebay/auth');
+    var r = await fetch('/api/ebay/auth?token=' + getToken());
     var d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Failed');
     if (d.auth_url) window.open(d.auth_url, '_blank');
@@ -375,7 +383,7 @@ D('asub').onclick = async function() {
 };
 
 // Navigation
-var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi','promoted'];
+var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi','promoted','seller'];
 function showPage(p) {
   for (var i = 0; i < PAGES.length; i++) {
     var pg = D('pg-' + PAGES[i]);
@@ -393,6 +401,7 @@ function showPage(p) {
   if (p === 'hot') loadHot();
   if (p === 'bulk') D('bulkRes').innerHTML = '';
   if (p === 'promoted') D('poRes').innerHTML = '';
+  if (p === 'seller') loadSellerDashboard();
 }
 var navEls = document.querySelectorAll('[data-pg]');
 for (var i = 0; i < navEls.length; i++) {
@@ -1111,6 +1120,78 @@ D('poGo').onclick = async function() {
   D('poGo').textContent = 'Optimize';
 };
 D('poq').onkeydown = D('pobp').onkeydown = function(e) { if (e.key === 'Enter') D('poGo').click(); };
+
+// ═══ EBAY SELLER DASHBOARD ═══
+async function loadSellerDashboard() {
+  if (!token) {
+    D('sellerStatus').innerHTML = '<span style="color:var(--r)">Login first to connect your eBay seller account.</span>';
+    D('sellerConnect').style.display = 'inline-block';
+    D('sellerDisconnect').style.display = 'none';
+    D('sellerRefresh').style.display = 'none';
+    return;
+  }
+  try {
+    var r = await fetch('/api/ebay/status?token=' + getToken());
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    if (d.connected) {
+      D('sellerStatus').innerHTML = '<span style="color:var(--g)">✅ Connected to eBay seller account</span>' + (d.expires_at ? ' <span style="color:var(--t2)">(token valid)</span>' : '');
+      D('sellerConnect').style.display = 'none';
+      D('sellerDisconnect').style.display = 'inline-block';
+      D('sellerRefresh').style.display = 'inline-block';
+      fetchSellerData();
+    } else {
+      D('sellerStatus').innerHTML = '<span style="color:var(--am)">⚠️ eBay seller account not connected.</span>';
+      D('sellerConnect').style.display = 'inline-block';
+      D('sellerDisconnect').style.display = 'none';
+      D('sellerRefresh').style.display = 'none';
+      D('sellerStats').innerHTML = '';
+      D('sellerInv').innerHTML = '';
+      D('sellerSold').innerHTML = '';
+    }
+  } catch(err) { D('sellerStatus').innerHTML = '<span style="color:var(--r)">Error: ' + err.message + '</span>'; }
+}
+async function fetchSellerData() {
+  try {
+    var dash = await fetch('/api/ebay/dashboard?token=' + getToken()).then(function(r) { return r.json(); });
+    D('sellerStats').innerHTML = '';
+    addStatCard(D('sellerStats'), '📦 Inventory', String(dash.inventory_count || 0), 'Active items', '');
+    addStatCard(D('sellerStats'), '💰 Sold', String(dash.sold_count || 0), '$' + FMT(dash.sold_revenue || 0) + ' revenue', '');
+    var inv = await fetch('/api/ebay/inventory?token=' + getToken()).then(function(r) { return r.json(); });
+    D('sellerInv').innerHTML = '<h3 style="margin-top:16px">📦 Inventory</h3>';
+    if (inv.items && inv.items.length) {
+      for (var i = 0; i < inv.items.length; i++) {
+        var it = inv.items[i];
+        var row = EL('div', 'lr', D('sellerInv'));
+        EL('span', 'it', row).textContent = it.title || 'Untitled';
+        EL('span', 'ip', row).textContent = '$' + FMT(it.price);
+      }
+    } else { D('sellerInv').innerHTML += '<div style="text-align:center;padding:20px;color:var(--t2)">No inventory items found.</div>'; }
+    var sold = await fetch('/api/ebay/sold?token=' + getToken()).then(function(r) { return r.json(); });
+    D('sellerSold').innerHTML = '<h3 style="margin-top:16px">💰 Sold Orders</h3>';
+    if (sold.orders && sold.orders.length) {
+      for (var i = 0; i < sold.orders.length; i++) {
+        var it = sold.orders[i];
+        var row = EL('div', 'lr', D('sellerSold'));
+        EL('span', 'it', row).textContent = it.title || 'Untitled';
+        EL('span', 'ip', row).textContent = '$' + FMT(it.price);
+        EL('span', 'id', row).textContent = it.sold_date ? it.sold_date.split('T')[0] : '';
+      }
+    } else { D('sellerSold').innerHTML += '<div style="text-align:center;padding:20px;color:var(--t2)">No sold orders found.</div>'; }
+  } catch(e) { D('sellerStatus').innerHTML = '<span style="color:var(--r)">Error loading seller data: ' + e.message + '</span>'; }
+}
+D('sellerConnect').onclick = function() {
+  if (!token) { alert('Login first.'); return; }
+  fetch('/api/ebay/auth?token=' + getToken())
+    .then(function(r) { return r.json(); })
+    .then(function(d) { if (d.auth_url) window.open(d.auth_url, '_blank'); else alert(d.error); })
+    .catch(function(e) { alert('Error: ' + e.message); });
+};
+D('sellerDisconnect').onclick = async function() {
+  await fetch('/api/ebay/disconnect?token=' + getToken(), {method:'POST'});
+  loadSellerDashboard();
+};
+D('sellerRefresh').onclick = fetchSellerData;
 
 async function loadHot() {
   try {

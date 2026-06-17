@@ -25,6 +25,45 @@ if _this_dir not in _sys.path:
     _sys.path.insert(0, _this_dir)
 from auth_routes import register_routes
 from db_init import init_db
+from firebase_service import get_provider, verify_firebase_id_token
+
+try:
+    from cryptography.fernet import Fernet
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+
+# Token / auth helpers
+def _get_user_id_from_request() -> str | None:
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        token = request.args.get("token", "")
+    if not token:
+        return None
+    fb_user = verify_firebase_id_token(token)
+    if fb_user:
+        return fb_user["uid"]
+    return get_provider().validate_session(token)
+
+# Token encryption helper
+def _get_fernet() -> Fernet | None:
+    if not CRYPTO_AVAILABLE:
+        return None
+    key = _os.environ.get("SECRET_KEY", "pricespy-default-secret-key-change-in-production")
+    key_bytes = base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest())
+    return Fernet(key_bytes)
+
+def _encrypt_token(token: str) -> str:
+    f = _get_fernet()
+    if f:
+        return f.encrypt(token.encode()).decode()
+    return token
+
+def _decrypt_token(encrypted: str) -> str:
+    f = _get_fernet()
+    if f:
+        return f.decrypt(encrypted.encode()).decode()
+    return encrypted
 
 # ── Configuration ────────────────────────────────────────────────────────
 EBAY_CLIENT_ID = os.environ.get("EBAY_CLIENT_ID", "").strip()
@@ -1278,7 +1317,7 @@ def api_photos():
             break
     return jsonify({"query": q, "condition": condition, "photos": photos, "ebay_url": u})
 
-# ── eBay Seller OAuth (skeleton) ───────────────────────────────────────
+# ── eBay Seller OAuth ───────────────────────────────────────────────────
 EBAY_REDIRECT_URI = os.environ.get("EBAY_REDIRECT_URI", "https://pricespy-yx00.onrender.com/api/ebay/callback")
 EBAY_SELLER_OAUTH_STATE = {}
 
@@ -1300,14 +1339,58 @@ def _get_ebay_seller_token(auth_code: str) -> dict | None:
         print(f"eBay seller token exchange error: {e}")
     return None
 
+def _refresh_ebay_seller_token(refresh_token: str) -> dict | None:
+    if not EBAY_CLIENT_ID or not EBAY_CLIENT_SECRET:
+        return None
+    creds = base64.b64encode(f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}".encode()).decode()
+    try:
+        r = SESSION.post(
+            EBAY_OAUTH_URL,
+            headers={"Authorization": f"Basic {creds}", "Content-Type": "application/x-www-form-urlencoded"},
+            data=f"grant_type=refresh_token&refresh_token={refresh_token}",
+            timeout=15,
+        )
+        if r.status_code == 200:
+            return r.json()
+        print(f"eBay seller token refresh failed: {r.status_code} {r.text[:200]}")
+    except Exception as e:
+        print(f"eBay seller token refresh error: {e}")
+    return None
+
+def _get_ebay_seller_access_token(user_id: str) -> str | None:
+    """Get a valid eBay seller access token for the user, refreshing if needed."""
+    sp = get_provider()
+    record = sp.get_ebay_tokens(user_id)
+    if not record:
+        return None
+    try:
+        access_token = _decrypt_token(record.get("access_token_enc", ""))
+        refresh_token = _decrypt_token(record.get("refresh_token_enc", ""))
+        expires_at = record.get("expires_at", 0)
+        if datetime.now(timezone.utc).timestamp() >= expires_at - 300:
+            refreshed = _refresh_ebay_seller_token(refresh_token)
+            if not refreshed:
+                return None
+            access_token = refreshed.get("access_token", "")
+            new_expires = datetime.now(timezone.utc).timestamp() + refreshed.get("expires_in", 7200)
+            sp.save_ebay_tokens(user_id, _encrypt_token(access_token), _encrypt_token(refresh_token),
+                                new_expires, record.get("scope", ""))
+        return access_token
+    except Exception as e:
+        print(f"eBay seller token retrieval failed: {e}")
+    return None
+
 @app.route("/api/ebay/auth")
 def ebay_seller_auth():
-    """Return the eBay seller OAuth URL."""
+    """Return the eBay seller OAuth URL. Requires user to be logged in."""
     if not EBAY_CLIENT_ID:
         return jsonify({"error": "eBay client ID not configured"}), 400
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
     import secrets
     state = secrets.token_hex(16)
-    EBAY_SELLER_OAUTH_STATE[state] = {"created_at": datetime.now(timezone.utc)}
+    EBAY_SELLER_OAUTH_STATE[state] = {"user_id": user_id, "created_at": datetime.now(timezone.utc)}
     scopes = " ".join([
         "https://api.ebay.com/oauth/api_scope",
         "https://api.ebay.com/oauth/api_scope/sell.inventory",
@@ -1326,7 +1409,7 @@ def ebay_seller_auth():
 
 @app.route("/api/ebay/callback")
 def ebay_seller_callback():
-    """Handle eBay seller OAuth callback."""
+    """Handle eBay seller OAuth callback and persist tokens."""
     auth_code = request.args.get("code", "")
     state = request.args.get("state", "")
     error = request.args.get("error", "")
@@ -1334,16 +1417,139 @@ def ebay_seller_callback():
         return jsonify({"error": error}), 400
     if not auth_code or state not in EBAY_SELLER_OAUTH_STATE:
         return jsonify({"error": "Invalid callback"}), 400
-    EBAY_SELLER_OAUTH_STATE.pop(state, None)
+    state_data = EBAY_SELLER_OAUTH_STATE.pop(state, None)
+    user_id = state_data.get("user_id") if state_data else None
+    if not user_id:
+        return jsonify({"error": "Invalid state"}), 400
     tokens = _get_ebay_seller_token(auth_code)
     if not tokens:
         return jsonify({"error": "Failed to exchange authorization code"}), 400
-    # TODO: persist tokens per user in Firestore/SQLite
+    access_token = tokens.get("access_token", "")
+    refresh_token = tokens.get("refresh_token", "")
+    expires_in = tokens.get("expires_in", 7200)
+    expires_at = datetime.now(timezone.utc).timestamp() + expires_in
+    scope = " ".join(tokens.get("scope", []))
+    get_provider().save_ebay_tokens(user_id, _encrypt_token(access_token), _encrypt_token(refresh_token),
+                                    expires_at, scope)
     return jsonify({
         "status": "connected",
-        "expires_in": tokens.get("expires_in"),
+        "expires_in": expires_in,
         "token_type": tokens.get("token_type"),
-        "note": "Token received. Persist to user record in production.",
+        "message": "eBay seller account connected successfully.",
+    })
+
+@app.route("/api/ebay/status")
+def ebay_seller_status():
+    """Check if the current user has a connected eBay seller account."""
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
+    record = get_provider().get_ebay_tokens(user_id)
+    connected = bool(record)
+    expires_at = record.get("expires_at") if record else None
+    return jsonify({
+        "connected": connected,
+        "expires_at": expires_at,
+        "token_valid": _get_ebay_seller_access_token(user_id) is not None,
+    })
+
+@app.route("/api/ebay/disconnect", methods=["POST"])
+def ebay_seller_disconnect():
+    """Disconnect the user's eBay seller account."""
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
+    get_provider().delete_ebay_tokens(user_id)
+    return jsonify({"status": "disconnected"})
+
+def _ebay_seller_api_get(user_id: str, endpoint: str, params: dict = None) -> dict | None:
+    """Make an authenticated GET request to an eBay seller API."""
+    access_token = _get_ebay_seller_access_token(user_id)
+    if not access_token:
+        return None
+    try:
+        r = SESSION.get(
+            f"{EBAY_API_BASE}{endpoint}",
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+            params=params or {},
+            timeout=20,
+        )
+        if r.status_code == 200:
+            return r.json()
+        print(f"eBay seller API error {r.status_code}: {r.text[:200]}")
+    except Exception as e:
+        print(f"eBay seller API request failed: {e}")
+    return None
+
+@app.route("/api/ebay/inventory")
+def ebay_seller_inventory():
+    """Get the user's eBay inventory items."""
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
+    data = _ebay_seller_api_get(user_id, "/sell/inventory/v1/inventory_item")
+    if data is None:
+        return jsonify({"error": "Could not fetch eBay inventory. Ensure eBay seller account is connected and has inventory scope."}), 400
+    items = []
+    for sku, item in data.get("inventoryItems", {}).items():
+        items.append({
+            "sku": sku,
+            "title": item.get("product", {}).get("title", ""),
+            "condition": item.get("condition", ""),
+            "price": item.get("availability", {}).get("shipToLocationAvailability", {}).get("availabilityThreshold", 0),
+            "listing": item.get("packageWeightAndSize", {}),
+        })
+    return jsonify({"items": items, "count": len(items)})
+
+@app.route("/api/ebay/sold")
+def ebay_seller_sold():
+    """Get the user's recent eBay sold orders."""
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
+    limit = min(int(request.args.get("limit", "50") or 50), 200)
+    data = _ebay_seller_api_get(user_id, "/sell/fulfillment/v1/order", params={"limit": limit})
+    if data is None:
+        return jsonify({"error": "Could not fetch eBay orders. Ensure eBay seller account is connected and has fulfillment scope."}), 400
+    orders = []
+    for order in data.get("orders", []):
+        total = order.get("pricingSummary", {}).get("total", {})
+        price = float(total.get("value", 0)) if isinstance(total, dict) else 0
+        line_items = order.get("lineItems", [])
+        orders.append({
+            "order_id": order.get("orderId", ""),
+            "title": line_items[0].get("title", "") if line_items else "",
+            "status": order.get("orderFulfillmentStatus", ""),
+            "price": price,
+            "sold_date": order.get("creationDate", ""),
+            "buyer": order.get("buyer", {}).get("username", ""),
+        })
+    return jsonify({"orders": orders, "count": len(orders)})
+
+@app.route("/api/ebay/dashboard")
+def ebay_seller_dashboard():
+    """Aggregate seller metrics."""
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
+    inventory = _ebay_seller_api_get(user_id, "/sell/inventory/v1/inventory_item")
+    orders = _ebay_seller_api_get(user_id, "/sell/fulfillment/v1/order", params={"limit": 200})
+    inv_count = len(inventory.get("inventoryItems", {})) if inventory else 0
+    sold_count = 0
+    sold_revenue = 0.0
+    if orders:
+        for order in orders.get("orders", []):
+            sold_count += 1
+            total = order.get("pricingSummary", {}).get("total", {})
+            try:
+                sold_revenue += float(total.get("value", 0)) if isinstance(total, dict) else 0
+            except Exception:
+                pass
+    return jsonify({
+        "inventory_count": inv_count,
+        "sold_count": sold_count,
+        "sold_revenue": round(sold_revenue, 2),
+        "connected": True,
     })
 
 # ── eBay Marketplace Account Deletion Notification ─────────────────────
