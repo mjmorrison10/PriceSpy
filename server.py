@@ -1244,6 +1244,157 @@ def api_title_optimize():
         "ebay_url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1&LH_Complete=1",
     })
 
+# ── Sales Analytics ──────────────────────────────────────────────────────
+def _title_similarity(a: str, b: str) -> float:
+    """Simple token-overlap similarity between two titles."""
+    if not a or not b:
+        return 0.0
+    a_tokens = set(re.findall(r'[a-z0-9]+', a.lower()))
+    b_tokens = set(re.findall(r'[a-z0-9]+', b.lower()))
+    if not a_tokens or not b_tokens:
+        return 0.0
+    overlap = a_tokens & b_tokens
+    return len(overlap) / max(len(a_tokens), len(b_tokens))
+
+def _match_inventory_to_title(inventory: list[dict], title: str) -> tuple[dict | None, float]:
+    """Find the best matching inventory item for an eBay order line item."""
+    best_match = None
+    best_score = 0.0
+    for item in inventory:
+        score = _title_similarity(title, item.get("item_name", ""))
+        if score > best_score and score > 0.5:
+            best_score = score
+            best_match = item
+    return best_match, best_score
+
+def _analyze_sales(user_id: str, store_tier: str = "none", start_date: str = "", end_date: str = "") -> dict | None:
+    """Pull eBay sold orders and match them to PriceSpy inventory for profit analysis."""
+    orders = _ebay_seller_api_get(user_id, "/sell/fulfillment/v1/order", params={"limit": 200})
+    if orders is None:
+        return None
+    inventory = get_provider().get_inventory(user_id)
+    matched = []
+    unmatched = []
+    total_revenue = 0.0
+    total_cost = 0.0
+    total_fees = 0.0
+    total_profit = 0.0
+    sales_by_month = defaultdict(float)
+
+    for order in orders.get("orders", []):
+        order_date = str(order.get("creationDate", ""))[:10]
+        if start_date and order_date < start_date:
+            continue
+        if end_date and order_date > end_date:
+            continue
+        for line_item in order.get("lineItems", []):
+            title = line_item.get("title", "")
+            price_info = line_item.get("lineItemCost", {})
+            price = float(price_info.get("value", 0)) if isinstance(price_info, dict) else 0.0
+            if price <= 0:
+                continue
+            total_revenue += price
+
+            inv_item, score = _match_inventory_to_title(inventory, title)
+            if inv_item:
+                buy_price = inv_item.get("buy_price", 0) or 0.0
+                category = _detect_ebay_category(title)
+                fees = _calculate_ebay_fees(price, 0.0, category, store_tier)
+                profit = price - buy_price - fees["total_fees"]
+                total_cost += buy_price
+                total_fees += fees["total_fees"]
+                total_profit += profit
+                matched.append({
+                    "title": title,
+                    "sold_price": round(price, 2),
+                    "buy_price": round(buy_price, 2),
+                    "fees": round(fees["total_fees"], 2),
+                    "profit": round(profit, 2),
+                    "sold_date": order_date,
+                    "inventory_id": inv_item.get("id"),
+                    "match_score": round(score, 2),
+                })
+                month = order_date[:7] if len(order_date) >= 7 else "unknown"
+                sales_by_month[month] += profit
+            else:
+                unmatched.append({
+                    "title": title,
+                    "sold_price": round(price, 2),
+                    "sold_date": order_date,
+                })
+                month = order_date[:7] if len(order_date) >= 7 else "unknown"
+                sales_by_month[month] += price
+
+    return {
+        "summary": {
+            "total_revenue": round(total_revenue, 2),
+            "total_cost": round(total_cost, 2),
+            "total_fees": round(total_fees, 2),
+            "total_profit": round(total_profit, 2),
+            "margin_pct": round((total_profit / total_revenue * 100), 1) if total_revenue > 0 else 0.0,
+            "items_sold": len(matched) + len(unmatched),
+            "matched_items": len(matched),
+            "unmatched_items": len(unmatched),
+        },
+        "matched": sorted(matched, key=lambda x: x["profit"], reverse=True),
+        "unmatched": unmatched,
+        "sales_by_month": [{"month": m, "profit": round(p, 2)} for m, p in sorted(sales_by_month.items())],
+    }
+
+@app.route("/api/analytics/sales")
+def api_analytics_sales():
+    """Return sales analytics for the connected eBay seller account."""
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
+    store_tier = request.args.get("store_tier", "none").strip().lower()
+    if store_tier not in EBAY_STORE_TIERS:
+        store_tier = "none"
+    start_date = request.args.get("start_date", "").strip()
+    end_date = request.args.get("end_date", "").strip()
+    if start_date and not re.match(r"\d{4}-\d{2}-\d{2}", start_date):
+        start_date = ""
+    if end_date and not re.match(r"\d{4}-\d{2}-\d{2}", end_date):
+        end_date = ""
+    result = _analyze_sales(user_id, store_tier, start_date, end_date)
+    if result is None:
+        return jsonify({"error": "Could not fetch eBay sales. Ensure seller account is connected and has fulfillment scope."}), 400
+    return jsonify(result)
+
+@app.route("/api/analytics/inventory-profit")
+def api_analytics_inventory_profit():
+    """Estimate profit for current inventory if sold at market median."""
+    user_id = _get_user_id_from_request()
+    if not user_id:
+        return jsonify({"error": "Login required"}), 401
+    store_tier = request.args.get("store_tier", "none").strip().lower()
+    if store_tier not in EBAY_STORE_TIERS:
+        store_tier = "none"
+    shipping = float(request.args.get("shipping", "0") or 0)
+    inventory = get_provider().get_inventory(user_id)
+    results = []
+    for item in inventory:
+        if item.get("status") == "sold":
+            continue
+        name = item.get("item_name", "").strip()
+        buy_price = item.get("buy_price", 0) or 0.0
+        if not name or buy_price <= 0:
+            continue
+        try:
+            r = _do_search(name, 180, "6m", "all", buy_price, store_tier, shipping)
+            fc = r.get("flip_analysis", {}).get("fee_calculation", {})
+            results.append({
+                "item_name": name,
+                "buy_price": round(buy_price, 2),
+                "market_median": round(r["sold_summary"].get("median", 0), 2),
+                "net_profit": round(fc.get("net_profit", 0), 2),
+                "flip_score": r.get("flip_analysis", {}).get("score", 0),
+            })
+        except Exception:
+            continue
+    results.sort(key=lambda x: x["net_profit"], reverse=True)
+    return jsonify({"items": results[:50], "count": len(results)})
+
 @app.route("/api/quick-deal")
 def api_quick_deal():
     raw = request.args.get("input", "").strip()

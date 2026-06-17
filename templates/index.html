@@ -87,6 +87,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <button class="pil" data-pg="promoted">📢</button>
 <button class="pil" data-pg="seller">🏪</button>
 <button class="pil" data-pg="title">✍️</button>
+<button class="pil" data-pg="analytics">📊</button>
 <button class="pil" id="navAuth">👤</button>
 <a href="/policy" class="pil" style="margin-left:4px">📜</a>
 <button class="pil" id="navTheme">🌙</button>
@@ -182,6 +183,17 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="rw"><div class="f1"><input type="text" id="toq" placeholder='Item, e.g. "iPhone 15 Pro 256GB"'></div><select id="tocond" style="width:150px"><option value="all">All Conditions</option><option value="new">New</option><option value="used">Used</option><option value="very_good">Very Good</option><option value="good">Good</option><option value="acceptable">Acceptable</option></select></div>
 <div class="rw mt1"><input type="text" id="tocur" placeholder="Your current title (optional)" style="flex:1"><button class="bt bt-p" id="toGo">Optimize</button></div>
 <div id="toRes" class="mt1"></div></div></div>
+
+<!-- SALES ANALYTICS -->
+<div class="pg" id="pg-analytics"><div class="cd"><h2>📊 Sales Analytics</h2><div class="sb">Analyze your actual eBay sales vs. what you paid. Requires connected eBay seller account.</div>
+<div class="rw mb1">
+<select id="anSt" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select>
+<input type="date" id="anStart" style="width:140px">
+<input type="date" id="anEnd" style="width:140px">
+<button class="bt bt-p" id="anGo">Analyze Sales</button>
+<button class="bt bt-g" id="anInv">Inventory Profit</button>
+</div>
+<div id="anRes" class="mt1"></div><div id="anChartWrap" class="mt1"></div></div></div>
 
 <!-- TRENDING -->
 <div class="pg" id="pg-trending"><div class="cd"><h2>📊 Trending</h2><div class="sb">Anonymous. What other flippers are watching.</div><div id="tr"></div></div></div>
@@ -390,7 +402,7 @@ D('asub').onclick = async function() {
 };
 
 // Navigation
-var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi','promoted','seller','title'];
+var PAGES = ['search','quick','watch','inventory','lot','deals','trending','bulk','dash','hot','roi','promoted','seller','title','analytics'];
 function showPage(p) {
   for (var i = 0; i < PAGES.length; i++) {
     var pg = D('pg-' + PAGES[i]);
@@ -410,6 +422,7 @@ function showPage(p) {
   if (p === 'promoted') D('poRes').innerHTML = '';
   if (p === 'seller') loadSellerDashboard();
   if (p === 'title') D('toRes').innerHTML = '';
+  if (p === 'analytics') D('anRes').innerHTML = '';
 }
 var navEls = document.querySelectorAll('[data-pg]');
 for (var i = 0; i < navEls.length; i++) {
@@ -1258,6 +1271,106 @@ D('toGo').onclick = async function() {
   D('toGo').textContent = 'Optimize';
 };
 D('toq').onkeydown = D('tocur').onkeydown = function(e) { if (e.key === 'Enter') D('toGo').click(); };
+
+// ═══ SALES ANALYTICS ═══
+D('anGo').onclick = loadSalesAnalytics;
+D('anInv').onclick = loadInventoryProfit;
+async function loadSalesAnalytics() {
+  if (!token) { D('anRes').innerHTML = '<div class="er on">Login first.</div>'; return; }
+  D('anGo').textContent = 'Loading...';
+  var st = D('anSt').value || 'none';
+  var start = D('anStart').value || '';
+  var end = D('anEnd').value || '';
+  var u = '/api/analytics/sales?token=' + getToken() + '&store_tier=' + st;
+  if (start) u += '&start_date=' + start;
+  if (end) u += '&end_date=' + end;
+  try {
+    var r = await fetch(u);
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    var res = D('anRes');
+    res.innerHTML = '';
+    var s = d.summary;
+    var sum = EL('div', 'gd', res);
+    addStatCard(sum, '💰 Revenue', '$' + FMT(s.total_revenue), s.items_sold + ' sold', '');
+    addStatCard(sum, '💸 Cost', '$' + FMT(s.total_cost), s.matched_items + ' tracked', '');
+    addStatCard(sum, '🧾 Fees', '$' + FMT(s.total_fees), 'eBay fees', '');
+    var pcls = s.total_profit >= 0 ? 'g' : 'r';
+    addStatCard(sum, '💵 Profit', (s.total_profit >= 0 ? '+' : '') + '$' + FMT(s.total_profit), s.margin_pct + '% margin', pcls);
+    addStatCard(sum, '❓ Unmatched', String(s.unmatched_items), 'Need buy price in inventory', s.unmatched_items > 0 ? 'am' : '');
+    if (d.matched && d.matched.length) {
+      var mt = EL('div', 'cd', res);
+      EL('h3', '', mt).textContent = '💰 Matched Sales';
+      for (var i = 0; i < d.matched.length; i++) {
+        var it = d.matched[i];
+        var row = EL('div', 'lr', mt);
+        EL('span', 'it', row).textContent = it.title;
+        EL('span', 'ic', row).textContent = it.sold_date;
+        EL('span', 'ip', row).textContent = '$' + it.sold_price.toFixed(2);
+        var prof = EL('span', '', row);
+        prof.style.cssText = 'color:' + (it.profit >= 0 ? 'var(--g)' : 'var(--r)') + ';font-weight:700;font-size:.8rem';
+        prof.textContent = (it.profit >= 0 ? '+' : '') + '$' + it.profit.toFixed(2);
+      }
+    }
+    if (d.unmatched && d.unmatched.length) {
+      var ut = EL('div', 'cd', res);
+      EL('h3', '', ut).textContent = '❓ Unmatched Sales (Add to Inventory)';
+      for (var i = 0; i < d.unmatched.length; i++) {
+        var it = d.unmatched[i];
+        var row = EL('div', 'lr', ut);
+        EL('span', 'it', row).textContent = it.title;
+        EL('span', 'ic', row).textContent = it.sold_date;
+        EL('span', 'ip', row).textContent = '$' + it.sold_price.toFixed(2);
+      }
+    }
+    if (d.sales_by_month && d.sales_by_month.length > 1) {
+      buildAnalyticsChart(d.sales_by_month);
+    } else {
+      D('anChartWrap').innerHTML = '';
+    }
+  } catch(e) {
+    D('anRes').innerHTML = '<div class="er on">' + e.message + '</div>';
+    D('anChartWrap').innerHTML = '';
+  }
+  D('anGo').textContent = 'Analyze Sales';
+}
+async function loadInventoryProfit() {
+  if (!token) { D('anRes').innerHTML = '<div class="er on">Login first.</div>'; return; }
+  D('anInv').textContent = 'Loading...';
+  var st = D('anSt').value || 'none';
+  try {
+    var r = await fetch('/api/analytics/inventory-profit?token=' + getToken() + '&store_tier=' + st);
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    var res = D('anRes');
+    res.innerHTML = '<h3 style="margin-bottom:10px">📦 Inventory Profit Potential</h3>';
+    if (!d.items || !d.items.length) { res.innerHTML += '<div style="color:var(--t2)">No inventory items with buy price found.</div>'; return; }
+    for (var i = 0; i < d.items.length; i++) {
+      var it = d.items[i];
+      var row = EL('div', 'lr', res);
+      EL('span', 'it', row).textContent = it.item_name;
+      EL('span', 'ip', row).textContent = '$' + FMT(it.buy_price) + ' \u2192 $' + FMT(it.market_median);
+      var prof = EL('span', '', row);
+      prof.style.cssText = 'color:' + (it.net_profit >= 0 ? 'var(--g)' : 'var(--r)') + ';font-weight:700;font-size:.8rem';
+      prof.textContent = (it.net_profit >= 0 ? '+' : '') + '$' + FMT(it.net_profit);
+    }
+    D('anChartWrap').innerHTML = '';
+  } catch(e) { D('anRes').innerHTML = '<div class="er on">' + e.message + '</div>'; }
+  D('anInv').textContent = 'Inventory Profit';
+}
+function buildAnalyticsChart(months) {
+  var wrap = D('anChartWrap');
+  wrap.innerHTML = '<div class="cd"><h3>📈 Profit by Month</h3><div class="cw" style="height:220px"><canvas id="anChart"></canvas></div></div>';
+  var canvas = D('anChart');
+  var labels = months.map(function(m) { return m.month; });
+  var data = months.map(function(m) { return m.profit; });
+  var color = data.map(function(v) { return v >= 0 ? 'rgba(52,211,153,.8)' : 'rgba(248,113,113,.8)'; });
+  new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ label: 'Profit', data: data, backgroundColor: color, borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#888', callback: function(v){ return '$'+v; } } }, x: { ticks: { color: '#888' } } } }
+  });
+}
 
 async function loadHot() {
   try {
