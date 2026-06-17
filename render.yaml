@@ -9,3 +9,4 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.0
+# Trigger redeploy Wed Jun 17 00:59:00 UTC 2026
