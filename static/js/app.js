@@ -265,6 +265,12 @@ function clearAll() {
   D('res').classList.remove('on');
   D('res').innerHTML = '';
   ce();
+  // Reset shipping estimator extras
+  if (D('shipWeight')) D('shipWeight').value = '';
+  if (D('shipDims')) D('shipDims').value = '';
+  _resetShipBadge('shipEstBadge');
+  _resetShipBadge('qdsEstBadge');
+  lastPhotoEstimate = null;
   // Un-highlight any active preset buttons
   var bpPresets = document.querySelectorAll('.bp-pre');
   for (var i=0; i<bpPresets.length; i++) { bpPresets[i].classList.remove('bt-p'); bpPresets[i].classList.add('bt-g'); }
@@ -318,7 +324,13 @@ D('cond').onchange = function() { if (data) { recalcFromExistingData(); } else {
 D('storeTier').onchange = function() { recalcFromExistingData(); };
 D('promo').onchange = function() { recalcFromExistingData(); };
 D('bp').onchange = function() { recalcFromExistingData(); };
-D('ship').onchange = function() { recalcFromExistingData(); };
+// Flag that distinguishes "AI is filling the ship field" from "user typed it".
+// estimateShipping() sets this to suppress the badge-clear on programmatic fills.
+var _aiFillingShip = false;
+D('ship').onchange = function() {
+  if (!_aiFillingShip) _resetShipBadge('shipEstBadge');
+  recalcFromExistingData();
+};
 
 async function recalcFromExistingData() {
   if (!data) { search(); return; }
@@ -359,6 +371,233 @@ function setShipPreset(val, el) {
   for (var i=0; i<btns.length; i++) { btns[i].classList.remove('bt-p'); btns[i].classList.add('bt-g'); }
   if (el) { el.classList.remove('bt-g'); el.classList.add('bt-p'); }
   recalcFromExistingData();
+}
+
+// ════════════════════════════ SHIPPING ESTIMATOR ════════════════════════════
+// Gemini-powered shipping cost estimator (USPS / UPS ground).
+// Caches the last AI estimate per item in JS to avoid repeat API calls.
+var lastPhotoEstimate = null;     // estimate from the most recent photo scan
+var shipEstCache = {};            // client-side cache: item_name -> estimate
+var shipEstInFlight = {};         // de-dupe concurrent requests per item
+
+function _shipBadgeEl(badgeId) {
+  if (!badgeId) return null;
+  var el = D(badgeId);
+  return el;
+}
+
+function _showShipBadgeLoading(badgeId, itemName) {
+  var el = _shipBadgeEl(badgeId);
+  if (!el) return;
+  el.style.display = 'inline-flex';
+  el.innerHTML = '<span class="sb-loading"></span>Estimating ship for "' +
+    (itemName.length > 28 ? itemName.slice(0, 28) + '…' : itemName) + '"…';
+}
+
+function _showShipBadgeResult(badgeId, itemName, est, opts) {
+  opts = opts || {};
+  var el = _shipBadgeEl(badgeId);
+  if (!el) return;
+  el.style.display = 'inline-flex';
+  var range = '$' + FMT(est.low_usd) + ' – $' + FMT(est.high_usd);
+  var serviceTxt = (est.carrier || '') + (est.service ? ' ' + est.service : '');
+  var confIcon = est.confidence === 'high' ? '🟢' : (est.confidence === 'medium' ? '🟡' : '⚪');
+  var suffix = opts.fallback ? ' (heuristic)' : (opts.cached ? ' (cached)' : '');
+  el.innerHTML =
+    confIcon + ' 📦 AI est. ' + range +
+    ' · mid $' + FMT(est.mid_usd) +
+    (serviceTxt ? ' · ' + serviceTxt : '') +
+    suffix +
+    ' <span class="sb-clear" title="Clear estimate">✕</span>';
+  var clr = el.querySelector('.sb-clear');
+  if (clr) {
+    clr.onclick = function(ev) {
+      ev.stopPropagation();
+      el.style.display = 'none';
+      el.innerHTML = '';
+    };
+  }
+  el.title = (est.reasoning || 'AI shipping estimate') +
+    '\nLow: $' + FMT(est.low_usd) +
+    '\nMid: $' + FMT(est.mid_usd) +
+    '\nHigh: $' + FMT(est.high_usd) +
+    (est.weight_lb_estimate ? '\nWeight: ~' + FMT(est.weight_lb_estimate) + ' lb' : '') +
+    '\n\nClick ✕ to clear.';
+}
+
+function _showShipBadgeError(badgeId, msg) {
+  var el = _shipBadgeEl(badgeId);
+  if (!el) return;
+  el.style.display = 'inline-flex';
+  el.style.background = 'rgba(248,113,113,.12)';
+  el.style.borderColor = 'rgba(248,113,113,.35)';
+  el.style.color = 'var(--r)';
+  el.innerHTML = '❌ ' + (msg || 'Estimate failed') +
+    ' <span class="sb-clear" title="Dismiss">✕</span>';
+  var clr = el.querySelector('.sb-clear');
+  if (clr) {
+    clr.onclick = function(ev) {
+      ev.stopPropagation();
+      el.style.display = 'none';
+      el.innerHTML = '';
+      // Reset inline style overrides for next attempt
+      el.style.background = '';
+      el.style.borderColor = '';
+      el.style.color = '';
+    };
+  }
+}
+
+function _resetShipBadge(badgeId) {
+  var el = _shipBadgeEl(badgeId);
+  if (!el) return;
+  el.style.display = 'none';
+  el.innerHTML = '';
+  el.style.background = '';
+  el.style.borderColor = '';
+  el.style.color = '';
+}
+
+/**
+ * Estimate shipping cost for an item via Gemini.
+ *
+ * @param {Object} opts
+ *   itemName    {string}  required — the product name
+ *   shipFieldId {string}  required — id of the <input> to populate with mid_usd
+ *   badgeId     {string}  optional — id of the badge element to show estimate
+ *   weightLbs   {number}  optional — user-provided weight
+ *   dimensions  {string}  optional — user-provided "L×W×H in"
+ *   onSuccess   {fn}      optional — called with the estimate object
+ *   quiet       {boolean} optional — skip showing the loading badge
+ */
+async function estimateShipping(opts) {
+  opts = opts || {};
+  var itemName = (opts.itemName || '').trim();
+  var shipFieldId = opts.shipFieldId;
+  var badgeId = opts.badgeId;
+  if (!itemName) {
+    if (badgeId) _showShipBadgeError(badgeId, 'No item name');
+    return null;
+  }
+  if (!shipFieldId || !D(shipFieldId)) {
+    if (badgeId) _showShipBadgeError(badgeId, 'No target field');
+    return null;
+  }
+
+  // Client cache hit?
+  var cacheKey = itemName.toLowerCase() + '|' + (opts.weightLbs || '') + '|' + (opts.dimensions || '');
+  var cached = shipEstCache[cacheKey];
+  if (cached && Date.now() - cached._ts < 24 * 3600 * 1000) {
+    _applyShipValue(shipFieldId, cached.mid_usd);
+    if (badgeId) _showShipBadgeResult(badgeId, itemName, cached, { cached: true });
+    if (opts.onSuccess) opts.onSuccess(cached);
+    return cached;
+  }
+
+  // In-flight de-dupe
+  if (shipEstInFlight[cacheKey]) {
+    try { await shipEstInFlight[cacheKey]; } catch (e) {}
+    var after = shipEstCache[cacheKey];
+    if (after && Date.now() - after._ts < 24 * 3600 * 1000) {
+      _applyShipValue(shipFieldId, after.mid_usd);
+      if (badgeId) _showShipBadgeResult(badgeId, itemName, after, { cached: true });
+      if (opts.onSuccess) opts.onSuccess(after);
+      return after;
+    }
+  }
+
+  if (badgeId && !opts.quiet) _showShipBadgeLoading(badgeId, itemName);
+
+  var payload = { item_name: itemName };
+  if (opts.weightLbs) payload.weight_lb = opts.weightLbs;
+  if (opts.dimensions) payload.dimensions = opts.dimensions;
+
+  var p = (async function() {
+    var r = await fetch('/api/estimate-shipping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    var est = d.estimate || {};
+    est._ts = Date.now();
+    est._cached = !!d.cached;
+    est._fallback = !!d.fallback;
+    shipEstCache[cacheKey] = est;
+    return { estimate: est, raw: d };
+  })();
+  shipEstInFlight[cacheKey] = p;
+  try {
+    var result = await p;
+    var est = result.estimate;
+    _applyShipValue(shipFieldId, est.mid_usd);
+    if (badgeId) _showShipBadgeResult(badgeId, itemName, est, {
+      cached: !!result.raw.cached, fallback: !!result.raw.fallback,
+    });
+    if (opts.onSuccess) opts.onSuccess(est);
+    return est;
+  } catch (err) {
+    if (badgeId) _showShipBadgeError(badgeId, err.message || 'Network error');
+    return null;
+  } finally {
+    delete shipEstInFlight[cacheKey];
+  }
+}
+
+// Sets a ship input value, dispatching 'change' so recalcFromExistingData()
+// runs — while preventing the change handler from clearing our AI badge.
+function _applyShipValue(fieldId, value) {
+  var el = D(fieldId);
+  if (!el) return;
+  _aiFillingShip = true;
+  try {
+    el.value = FMT(value);
+    el.dispatchEvent(new Event('change'));
+  } finally {
+    _aiFillingShip = false;
+  }
+}
+
+// Wire up the manual "📦 Estimate" buttons (search + quick deal pages)
+function _wireShipEstButtons() {
+  if (D('shipEstBtn')) {
+    D('shipEstBtn').onclick = function() {
+      var q = D('q').value.trim();
+      if (!q) {
+        _showShipBadgeError('shipEstBadge', 'Type an item first');
+        return;
+      }
+      estimateShipping({
+        itemName: q,
+        shipFieldId: 'ship',
+        badgeId: 'shipEstBadge',
+        weightLbs: parseFloat(D('shipWeight').value) || undefined,
+        dimensions: D('shipDims').value.trim() || undefined,
+      });
+    };
+  }
+  if (D('qdsEstBtn')) {
+    D('qdsEstBtn').onclick = function() {
+      var q = D('qd').value.trim();
+      if (!q) {
+        _showShipBadgeError('qdsEstBadge', 'Type an item first');
+        return;
+      }
+      estimateShipping({
+        itemName: q,
+        shipFieldId: 'qds',
+        badgeId: 'qdsEstBadge',
+      });
+    };
+  }
+  // When the user manually edits ship weight/dims, reset the badge so they re-estimate
+  if (D('shipWeight')) {
+    D('shipWeight').oninput = function() { _resetShipBadge('shipEstBadge'); };
+  }
+  if (D('shipDims')) {
+    D('shipDims').oninput = function() { _resetShipBadge('shipEstBadge'); };
+  }
 }
 
 async function recalcAfterManualDelete() {
@@ -1408,11 +1647,25 @@ function analyzePhotoWithContext() {
         D('photoDesc').value = '❌ AI Analysis Failed';
         D('aiErrorText').textContent = d.error;
         SHOW('aiErrorOv');
+        lastPhotoEstimate = null;
       } else if (d.description) {
         D('photoDesc').value = d.description;
+        // Auto-estimate shipping in the background; the user can still
+        // override the ship field manually before clicking "Run eBay Search".
+        lastPhotoEstimate = null;
+        estimateShipping({
+          itemName: d.description,
+          shipFieldId: 'ship',  // used only to compute the value; applied on submit
+          badgeId: null,
+          quiet: true,
+          onSuccess: function(est) {
+            lastPhotoEstimate = { itemName: d.description, estimate: est };
+          },
+        });
       } else {
         D('photoDesc').value = '';
         D('photoDesc').placeholder = 'Could not detect product. Type item name manually.';
+        lastPhotoEstimate = null;
       }
     })
     .catch(function(err){
@@ -1422,6 +1675,7 @@ function analyzePhotoWithContext() {
       D('photoDesc').value = '❌ Network Error';
       D('aiErrorText').textContent = 'Network error: ' + err.message;
       SHOW('aiErrorOv');
+      lastPhotoEstimate = null;
     });
 }
 
@@ -1437,9 +1691,19 @@ D('photoSearchBtn').onclick = function() {
   if (activePhotoTarget === 'lot') {
     D('li').value = desc; D('ladd').onclick();
   } else if (activePhotoTarget === 'quick') {
-    D('qd').value = desc; rqd();
+    D('qd').value = desc;
+    if (lastPhotoEstimate && lastPhotoEstimate.estimate) {
+      D('qds').value = FMT(lastPhotoEstimate.estimate.mid_usd);
+      _showShipBadgeResult('qdsEstBadge', desc, lastPhotoEstimate.estimate, { cached: !!lastPhotoEstimate.estimate._cached });
+    }
+    rqd();
   } else {
-    D('q').value = desc; search();
+    D('q').value = desc;
+    if (lastPhotoEstimate && lastPhotoEstimate.estimate) {
+      D('ship').value = FMT(lastPhotoEstimate.estimate.mid_usd);
+      _showShipBadgeResult('shipEstBadge', desc, lastPhotoEstimate.estimate, { cached: !!lastPhotoEstimate.estimate._cached });
+    }
+    search();
   }
 };
 
@@ -1534,7 +1798,7 @@ async function lookupBarcode(code) {
       tit = d.brand ? d.brand + ' ' + d.title : d.title;
     }
   } catch(e) {}
-  
+
   if (activeScanTarget === 'lot') {
     D('li').value = tit; D('ladd').onclick();
   } else if (activeScanTarget === 'quick') {
@@ -1543,6 +1807,9 @@ async function lookupBarcode(code) {
     D('q').value = tit; search();
   }
 }
+
+// Wire up the shipping estimator buttons (must run after DOM is ready)
+_wireShipEstButtons();
 
 console.log('PriceSpy eBay-only ready');
 

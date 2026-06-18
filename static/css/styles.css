@@ -56,6 +56,10 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 .lr:hover{background:var(--s2)}.lr .it{flex:1;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lr .ip{font-weight:700;font-size:.9rem;white-space:nowrap}.lr .ic{font-size:.65rem;color:var(--t2);background:var(--s2);padding:2px 7px;border-radius:10px;white-space:nowrap}.lr .id{font-size:.68rem;color:var(--t2);white-space:nowrap}
 .xdel{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:var(--r);font-size:.78rem;cursor:pointer;flex-shrink:0}.xdel:hover{background:rgba(248,113,113,.2);border-color:var(--r)}
+.ship-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(91,141,239,.12);border:1px solid rgba(91,141,239,.35);border-radius:14px;font-size:.72rem;color:var(--a);font-weight:600;cursor:default;line-height:1}
+.ship-badge .sb-clear{cursor:pointer;opacity:.6;font-size:.85rem;padding:0 2px;line-height:1}
+.ship-badge .sb-clear:hover{opacity:1;color:var(--r)}
+.ship-badge .sb-loading{display:inline-block;width:10px;height:10px;border:1.5px solid var(--b);border-top-color:var(--a);border-radius:50%;animation:sp .6s linear infinite;margin-right:4px;vertical-align:middle}
 .lscroll{max-height:275px;overflow-y:auto;padding-right:4px;margin-bottom:10px;scrollbar-width:thin;scrollbar-color:var(--b) transparent}.lscroll::-webkit-scrollbar{width:6px}.lscroll::-webkit-scrollbar-thumb{background:var(--b);border-radius:6px}.lcount{font-size:.68rem;color:var(--t2);margin:-4px 0 8px}
 .ft{text-align:center;padding:16px;color:var(--t2);font-size:.78rem;line-height:1.6;border-top:1px solid var(--b);margin-top:24px;opacity:.8}
 .ft .vt{font-style:italic}.ft .vr{font-size:.68rem;opacity:.6}

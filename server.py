@@ -2104,6 +2104,256 @@ def api_identify():
         print(f"Gemini identification failed: {e}")
         return jsonify({"description": "", "error": f"❌ Gemini AI error: {e}"}), 200
 
+# ── Shipping Cost Estimator (Gemini structured JSON) ───────────────────
+SHIPPING_ESTIMATE_PROMPT = """You are a shipping cost estimator for US-based eBay/flipping sellers.
+Given the product below, estimate the typical cost a small online seller would pay to ship it to a domestic US buyer using USPS or UPS ground services.
+
+Pick the cheapest reasonable shipping option for a small parcel (under 20 lb) shipped by an individual seller.
+Use your real-world knowledge of current 2025 USPS/UPS retail rates.
+
+Product name: {item_name}
+Approximate weight: {weight_str}
+Approximate packed dimensions: {dims_str}
+
+Return ONLY a JSON object with these fields:
+- low_usd: number (cheapest reasonable option, e.g. USPS Ground Advantage)
+- mid_usd: number (most likely actual cost)
+- high_usd: number (faster/premium option if applicable, e.g. USPS Priority Mail)
+- carrier: string (e.g. "USPS", "UPS")
+- service: string (specific service, e.g. "Ground Advantage", "Priority Mail", "UPS Ground")
+- weight_lb_estimate: number (your best guess of packed weight in pounds)
+- reasoning: string (one short sentence explaining the estimate)
+- confidence: string ("high" if item is specific, "medium" if somewhat generic, "low" if very generic)
+
+If the item appears to be very fragile, oversized, or hazardous, mention that in reasoning but still give a numeric estimate."""
+
+# Cache for shipping estimates (keyed on normalized item name)
+SHIPPING_CACHE: dict[str, dict] = {}
+SHIPPING_CACHE_TTL = 7 * 24 * 3600  # 7 days — shipping rates don't change daily
+
+# Rough weight hints by item keyword — used to give the AI a better starting point
+WEIGHT_HINTS_LB = {
+    "iphone": 1.0, "smartphone": 1.0, "phone": 1.0, "cell phone": 1.0,
+    "ipad": 2.0, "tablet": 2.0,
+    "macbook": 6.0, "laptop": 6.0, "chromebook": 4.0,
+    "headphone": 1.5, "headphones": 1.5, "earbuds": 0.5, "airpods": 0.5,
+    "watch": 1.0, "apple watch": 1.0, "smartwatch": 1.0,
+    "textbook": 3.0, "book": 1.5, "hardcover book": 2.0, "paperback": 1.0,
+    "comic": 0.3, "magazine": 0.5,
+    "video game": 0.5, "nintendo switch": 3.0, "switch lite": 2.0,
+    "playstation 5": 10.0, "ps5": 10.0, "playstation 4": 7.0, "ps4": 7.0,
+    "xbox series x": 13.0, "xbox series s": 6.0, "xbox one": 8.0,
+    "controller": 1.0, "joycon": 0.5,
+    "camera": 3.0, "dslr": 3.0, "mirrorless camera": 2.5,
+    "shoe": 3.0, "sneaker": 3.0, "boot": 4.0, "jordan": 3.0, "dunk": 3.0, "yeezy": 3.0,
+    "shirt": 1.0, "t-shirt": 0.8, "jacket": 2.0, "hoodie": 1.5, "sweater": 1.5,
+    "lego": 3.0, "toy": 2.0, "action figure": 1.0, "funko": 0.5, "doll": 2.0,
+    "pokemon card": 0.1, "trading card": 0.1, "mtg": 0.1, "yugioh": 0.1,
+    "drill": 5.0, "tool": 5.0, "dewalt": 6.0, "milwaukee": 6.0, "makita": 6.0,
+    "speaker": 4.0, "bluetooth speaker": 1.5,
+    "monitor": 15.0, "tv": 30.0,
+    "keyboard": 3.0, "mechanical keyboard": 3.0,
+    "mouse": 0.5, "gaming mouse": 0.5,
+    "router": 2.0, "modem": 2.0,
+    "vinyl record": 1.0, "lp": 1.0,
+    "puzzle": 2.0,
+    "guitar": 12.0, "fender stratocaster": 12.0, "gibson": 12.0,
+    "amplifier": 15.0, "amp": 15.0,
+    "purse": 2.0, "handbag": 2.0, "wallet": 0.5, "belt": 0.5,
+    "hat": 0.5, "cap": 0.5, "beanie": 0.3,
+    "mug": 1.5, "cup": 1.0, "glass": 1.5,
+    "lamp": 3.0,
+    "kayak": 50.0, "tent": 8.0,
+}
+
+def _estimate_weight_lb_hint(item_name: str) -> float:
+    n = (item_name or "").lower()
+    # Longest keys first so "nintendo switch" matches before "switch"
+    for k in sorted(WEIGHT_HINTS_LB.keys(), key=len, reverse=True):
+        if k in n:
+            return WEIGHT_HINTS_LB[k]
+    return 1.0  # generic small-parcel default
+
+
+def _normalize_ship_key(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").lower().strip())
+
+
+def _get_cached_shipping(item_name: str) -> dict | None:
+    entry = SHIPPING_CACHE.get(_normalize_ship_key(item_name))
+    if not entry:
+        return None
+    try:
+        age = (datetime.now(timezone.utc) - entry.get("_ts", datetime.now(timezone.utc))).total_seconds()
+    except Exception:
+        age = SHIPPING_CACHE_TTL + 1
+    if age > SHIPPING_CACHE_TTL:
+        SHIPPING_CACHE.pop(_normalize_ship_key(item_name), None)
+        return None
+    return {k: v for k, v in entry.items() if not k.startswith("_")}
+
+
+def _cache_shipping(item_name: str, data: dict) -> None:
+    payload = dict(data)
+    payload["_ts"] = datetime.now(timezone.utc)
+    SHIPPING_CACHE[_normalize_ship_key(item_name)] = payload
+
+
+def _fallback_shipping_estimate(item_name: str, weight_lb: float | None) -> dict:
+    """Heuristic estimate when Gemini is unavailable."""
+    w = float(weight_lb) if weight_lb and weight_lb > 0 else _estimate_weight_lb_hint(item_name)
+    # Rough USPS Ground Advantage-ish pricing: $4 base + ~$1/lb for small parcels
+    mid = max(4.0, min(45.0, 4.0 + w * 1.2))
+    return {
+        "low_usd": round(mid * 0.75, 2),
+        "mid_usd": round(mid, 2),
+        "high_usd": round(mid * 1.6, 2),
+        "carrier": "USPS",
+        "service": "Ground Advantage",
+        "weight_lb_estimate": round(w, 2),
+        "reasoning": f"Heuristic estimate for a ~{w:.1f} lb item via USPS Ground Advantage.",
+        "confidence": "low",
+    }
+
+
+@app.route("/api/estimate-shipping", methods=["POST"])
+def api_estimate_shipping():
+    """Estimate US shipping cost for an item using Gemini (USPS/UPS ground)."""
+    data = request.get_json(silent=True) or {}
+    item_name = (data.get("item_name") or data.get("q") or "").strip()
+    if not item_name:
+        return jsonify({"error": "Missing item_name"}), 400
+    if len(item_name) > 200:
+        item_name = item_name[:200]
+
+    # Optional accuracy boosters
+    weight_lb_raw = data.get("weight_lb", "")
+    try:
+        weight_lb = float(weight_lb_raw) if weight_lb_raw not in (None, "") else None
+        if weight_lb is not None and (weight_lb <= 0 or weight_lb > 200):
+            weight_lb = None
+    except (TypeError, ValueError):
+        weight_lb = None
+    dimensions = (data.get("dimensions") or "").strip()[:100]
+
+    # Server-side cache (shared across users)
+    if not weight_lb and not dimensions:
+        cached = _get_cached_shipping(item_name)
+        if cached:
+            return jsonify({"item_name": item_name, "estimate": cached, "cached": True})
+
+    if not GEMINI_API_KEY:
+        # No API key → fall back to a heuristic so the UI never breaks
+        est = _fallback_shipping_estimate(item_name, weight_lb)
+        return jsonify({
+            "item_name": item_name,
+            "estimate": est,
+            "cached": False,
+            "fallback": True,
+            "warning": "Gemini API key not configured. Using rough weight-based estimate.",
+        })
+
+    weight_str = f"{weight_lb:.1f} lb (user-provided)" if weight_lb else (
+        f"unknown — please estimate (~{_estimate_weight_lb_hint(item_name):.1f} lb hint from category)"
+    )
+    dims_str = dimensions if dimensions else "unknown — please estimate packed dimensions"
+
+    prompt = SHIPPING_ESTIMATE_PROMPT.format(
+        item_name=item_name,
+        weight_str=weight_str,
+        dims_str=dims_str,
+    )
+
+    # Structured JSON output schema
+    generation_config = {
+        "response_mime_type": "application/json",
+        "response_schema": {
+            "type": "object",
+            "properties": {
+                "low_usd": {"type": "number"},
+                "mid_usd": {"type": "number"},
+                "high_usd": {"type": "number"},
+                "carrier": {"type": "string"},
+                "service": {"type": "string"},
+                "weight_lb_estimate": {"type": "number"},
+                "reasoning": {"type": "string"},
+                "confidence": {"type": "string"},
+            },
+            "required": [
+                "low_usd", "mid_usd", "high_usd", "carrier", "service",
+                "weight_lb_estimate", "reasoning", "confidence",
+            ],
+        },
+    }
+
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash-lite", generation_config=generation_config)
+            response = model.generate_content(prompt)
+        except Exception as e1:
+            print(f"gemini-2.5-flash-lite failed ({e1}), trying gemini-2.5-flash...")
+            model = genai.GenerativeModel("gemini-2.5-flash", generation_config=generation_config)
+            response = model.generate_content(prompt)
+
+        try:
+            estimate = json.loads(response.text)
+        except Exception as parse_err:
+            print(f"Shipping estimate JSON parse failed: {parse_err}; raw={response.text[:200]}")
+            raise parse_err
+
+        # Sanitize numeric values
+        for k in ("low_usd", "mid_usd", "high_usd"):
+            try:
+                v = float(estimate.get(k, 0) or 0)
+            except (TypeError, ValueError):
+                v = 0.0
+            v = max(0.0, min(500.0, v))
+            estimate[k] = round(v, 2)
+
+        # Enforce low <= mid <= high ordering
+        if estimate["high_usd"] > 0 and estimate["mid_usd"] > estimate["high_usd"]:
+            estimate["mid_usd"] = estimate["high_usd"]
+        if estimate["mid_usd"] < estimate["low_usd"]:
+            estimate["mid_usd"] = estimate["low_usd"]
+
+        # Weight
+        try:
+            w = float(estimate.get("weight_lb_estimate", 0) or 0)
+        except (TypeError, ValueError):
+            w = 0.0
+        estimate["weight_lb_estimate"] = round(max(0.0, min(200.0, w)), 2)
+
+        # Confidence normalization
+        conf = (estimate.get("confidence") or "").strip().lower()
+        if conf not in ("high", "medium", "low"):
+            conf = "medium"
+        estimate["confidence"] = conf
+
+        # Strings trimmed
+        for k in ("carrier", "service", "reasoning"):
+            estimate[k] = str(estimate.get(k) or "").strip()[:300]
+
+        # Cache successful result (no weight/dim overrides — those are per-request)
+        if not weight_lb and not dimensions:
+            _cache_shipping(item_name, estimate)
+
+        return jsonify({"item_name": item_name, "estimate": estimate, "cached": False})
+
+    except Exception as e:
+        print(f"Shipping estimate failed: {e}")
+        traceback.print_exc()
+        est = _fallback_shipping_estimate(item_name, weight_lb)
+        return jsonify({
+            "item_name": item_name,
+            "estimate": est,
+            "cached": False,
+            "fallback": True,
+            "error": str(e),
+        })
+
+
 # ── Barcode Lookup ───────────────────────────────────────────────────────
 @app.route("/api/barcode")
 def api_barcode():

@@ -85,7 +85,13 @@
                 </select>
                 <input type="number" id="bp" placeholder="Buy price" step="0.01" min="0" style="width:100px">
                 <input type="number" id="ship" placeholder="Ship cost" step="0.01" min="0" style="width:90px">
+                <button class="bt bt-p" id="shipEstBtn" title="Estimate shipping cost with Gemini (USPS / UPS)" style="padding:10px 12px">📦</button>
                 <input type="number" id="promo" placeholder="Ad %" value="0" step="0.1" min="0" style="width:70px">
+            </div>
+            <div class="rw mt1" style="gap:6px">
+                <input type="number" id="shipWeight" placeholder="Weight (lb, optional)" step="0.1" min="0" style="width:140px;font-size:.78rem" title="Helps Gemini estimate shipping more accurately">
+                <input type="text" id="shipDims" placeholder="Dimensions L×W×H in (optional)" style="width:200px;font-size:.78rem" title="Helps Gemini estimate shipping more accurately">
+                <span id="shipEstBadge" class="ship-badge" style="display:none" title="Click ✕ to clear"></span>
             </div>
             <div class="rw mt1" style="gap:6px;flex-wrap:wrap;align-items:center">
                 <span style="font-size:.78rem;color:var(--t2);margin-right:2px;font-weight:600">⚡ Presets:</span>
@@ -132,7 +138,9 @@
                     <option value="anchor">Anchor Store</option>
                 </select>
                 <input type="number" id="qds" placeholder="Ship" step="0.01" style="width:80px">
+                <button class="bt bt-p" id="qdsEstBtn" title="Estimate shipping cost with Gemini" style="padding:10px 12px">📦</button>
             </div>
+            <div id="qdsEstBadge" class="ship-badge" style="display:none;margin-top:6px"></div>
             <div id="vst" style="font-size:.7rem;color:var(--a);margin-top:4px;display:none"></div>
             <div id="qdr"></div>
         </div>
