@@ -125,7 +125,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <!-- SEARCH -->
 <div class="pg on" id="pg-search">
 <div class="cd"><h2>What's it worth on eBay?</h2><div class="sb">Real eBay sold prices, eBay fees, liquidity, and saturation. No fake data.</div>
-<div class="rw"><div class="f1"><input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none"><input type="text" id="q" placeholder='Try "Nintendo Switch OLED" or "iPhone 15 Pro"...' autocomplete="off"></div><button class="bt bt-p" id="camBtn" title="Identify item from photo" style="padding:10px 14px">📷</button><button class="bt bt-p" id="qb">Search</button></div>
+<div class="rw"><div class="f1"><input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none"><input type="text" id="q" placeholder='Try "Nintendo Switch OLED" or "iPhone 15 Pro"...' autocomplete="off"></div><button class="bt bt-p" id="camBtn" title="Identify item from photo" style="padding:10px 14px">📷</button><button class="bt bt-p" id="mainScanBtn" title="Scan Barcode / UPC" style="padding:10px 14px">🏷️</button><button class="bt bt-p" id="qb">Search</button></div>
 <div class="rw mt1">
 <select id="cond" style="width:170px">
   <option value="all">All Conditions</option>
@@ -162,7 +162,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 
 <!-- QUICK DEAL -->
 <div class="pg" id="pg-quick"><div class="cd"><h2>⚡ Quick Deal</h2><div class="sb">Describe item + price. Instant BUY or LEAVE.</div>
-<div class="rw"><div class="f1"><input type="text" id="qd" placeholder='e.g. "Nikon D850, good, $400"'><button class="bt bt-p" id="micBtn" title="Speak your item" style="padding:10px 14px">🎤</button><button class="bt bt-p" id="scanBtn" title="Scan barcode" style="padding:10px 14px">📷</button></div><button class="bt bt-p" id="qdg">Analyze</button></div>
+<div class="rw"><div class="f1"><input type="text" id="qd" placeholder='e.g. "Nikon D850, good, $400"'><button class="bt bt-p" id="micBtn" title="Speak your item" style="padding:10px 14px">🎤</button><button class="bt bt-p" id="scanBtn" title="Scan barcode" style="padding:10px 14px">🏷️</button></div><button class="bt bt-p" id="qdg">Analyze</button></div>
 <div class="rw mt1"><select id="qdst" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><input type="number" id="qds" placeholder="Ship" step="0.01" style="width:80px"></div>
 <div id="vst" style="font-size:.7rem;color:var(--a);margin-top:4px;display:none"></div><div id="qdr"></div></div></div>
 
@@ -176,8 +176,9 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 
 <!-- LOT CALC -->
 <div class="pg" id="pg-lot"><div class="cd"><h2>🧮 Lot Calculator</h2>
-<div class="rw"><div class="f1"><input type="text" id="li" placeholder="Item name"></div><input type="number" id="lp" placeholder="Price" step="0.01" style="width:90px"><button class="bt bt-p" id="ladd">+</button></div>
-<div class="rw mt1"><select id="lst" style="width:150px"><option value="none">No eBay Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><input type="number" id="lship" value="0" step="0.01" style="width:80px"><button class="bt bt-p" id="lcalc">⚡ Calc</button></div>
+<div class="sb">Scan or add items in rapid succession to calculate combined bundle Net Profit.</div>
+<div class="rw"><div class="f1"><input type="text" id="li" placeholder="Item name or UPC"></div><input type="number" id="lp" placeholder="Cost (opt)" step="0.01" style="width:90px"><button class="bt bt-p" id="lotScanBtn" title="Scan Barcode / UPC" style="padding:10px 14px">🏷️</button><button class="bt bt-p" id="ladd">+</button></div>
+<div class="rw mt1"><input type="number" id="ltotalCost" placeholder="Total asking $" step="0.01" style="width:115px"><select id="lst" style="width:140px"><option value="none">No Store</option><option value="basic">Basic Store</option><option value="premium">Premium Store</option><option value="anchor">Anchor Store</option></select><input type="number" id="lship" placeholder="Ship/it" value="0" step="0.01" style="width:70px"><button class="bt bt-p" id="lcalc">⚡ Calc</button><button class="bt bt-g" id="lclear" title="Clear Lot">🗑️</button></div>
 <div id="litems" class="mt1"></div><div id="lres"></div></div></div>
 
 <!-- DEALS -->
@@ -304,10 +305,12 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="rw"><button class="bt bt-p" id="photoAnalyzeBtn" style="flex:1">✨ Identify with AI</button><button class="bt bt-p" id="photoSearchBtn" style="flex:1">🔍 Search</button><button class="bt bt-g" id="photoCancel" style="flex:1">Cancel</button></div></div></div>
 
 <!-- Barcode Scan Overlay -->
-<div class="ov" id="scanOv"><div class="ovc"><h3>📷 Scan Barcode</h3>
-<video id="scanVid" autoplay playsinline style="width:100%;border-radius:var(--rs);background:#000;max-height:260px;object-fit:cover"></video>
-<div id="scanSt" style="text-align:center;padding:12px;font-size:.9rem;color:var(--t2)">Point camera at a barcode</div>
-<button class="bt bt-g" style="width:100%" onclick="stopScan()">Cancel</button></div></div>
+<div class="ov" id="scanOv"><div class="ovc"><h3>🏷️ Barcode & Box Scanner</h3>
+<video id="scanVid" autoplay playsinline style="width:100%;border-radius:var(--rs);background:#000;max-height:260px;object-fit:cover;margin-bottom:8px"></video>
+<div id="scanSt" style="text-align:center;padding:4px;font-size:.9rem;color:var(--t2);margin-bottom:8px">Point camera at a barcode</div>
+<div class="rw mb1"><input type="text" id="scanManualInput" placeholder="Type or paste UPC / Model #" autocomplete="off" style="flex:1"><button class="bt bt-p" id="scanManualBtn">Lookup</button></div>
+<button class="bt bt-p mb1" id="scanBoxPhotoBtn" style="width:100%">📦 Upload Photo of Box / Barcode</button>
+<button class="bt bt-g" style="width:100%" onclick="stopScan()">Close</button></div></div>
 
 <script>
 // ════════════════════════════ FIREBASE ════════════════════════════
@@ -1117,25 +1120,31 @@ function rLot() {
   D('litems').innerHTML = '';
   for (var i = 0; i < LZ.length; i++) {
     var row = EL('div', 'lr', D('litems'));
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--s);border:1px solid var(--b);border-radius:var(--rs);margin-bottom:6px';
     var nm = EL('span', '', row); nm.style.fontWeight = '600'; TXT(nm, LZ[i].name);
-    var pr = EL('span', 'ip', row); TXT(pr, '$' + LZ[i].price.toFixed(2));
-    var del = EL('button', 'bt bt-g', row); del.style.cssText = 'padding:2px 8px;font-size:.65rem'; TXT(del, '✕');
+    var rightGrp = EL('div', '', row); rightGrp.style.cssText = 'display:flex;align-items:center;gap:12px';
+    if (LZ[i].price > 0) { var pr = EL('span', 'ip', rightGrp); TXT(pr, '$' + LZ[i].price.toFixed(2)); }
+    var del = EL('button', 'bt bt-g', rightGrp); del.style.cssText = 'padding:2px 8px;font-size:.65rem'; TXT(del, '✕');
     del.onclick = (function(idx) { return function() { LZ.splice(idx,1); rLot(); }; })(i);
   }
 }
 D('ladd').onclick = function() {
   var n = D('li').value.trim();
   var p = parseFloat(D('lp').value) || 0;
-  if (!n || p <= 0) return;
+  if (!n) return;
   LZ.push({name:n, price:p}); D('li').value = ''; D('lp').value = ''; rLot();
+  D('li').focus();
 };
+D('li').onkeydown = function(e) { if (e.key === 'Enter') D('ladd').onclick(); };
+D('lclear').onclick = function() { LZ.length = 0; D('lres').innerHTML = ''; rLot(); };
 D('lcalc').onclick = async function() {
   if (!LZ.length) return;
   var st = D('lst').value || 'none';
   var sh = parseFloat(D('lship').value) || 0;
+  var tCost = parseFloat(D('ltotalCost').value) || 0;
   D('lcalc').textContent = '...';
   try {
-    var r = await fetch('/api/lot-calculate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:LZ, store_tier:st, shipping_per_item:sh})});
+    var r = await fetch('/api/lot-calculate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({items:LZ, store_tier:st, shipping_per_item:sh, total_lot_cost:tCost})});
     var d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Failed');
     var c = d.verdict_color === 'green' ? 'var(--g)' : (d.verdict_color === 'amber' ? 'var(--am)' : 'var(--r)');
@@ -1148,10 +1157,26 @@ D('lcalc').onclick = async function() {
     TXT(big, d.verdict);
     var grid = EL('div', 'gd', wrap);
     grid.style.cssText = 'margin-top:10px;text-align:left';
-    addStatCard(grid, 'Cost', '$' + FMT(d.total_cost), '', '');
-    addStatCard(grid, 'Market', '$' + FMT(d.total_market_value), '', '');
-    addStatCard(grid, 'Net', ((d.total_profit||0) >= 0 ? '+' : '') + '$' + FMT(d.total_profit), '', (d.total_profit||0) >= 0 ? 'g' : 'r');
-    LZ.length = 0; rLot();
+    addStatCard(grid, 'Asking Cost', '$' + FMT(d.total_cost), tCost > 0 ? 'Custom overall lot cost' : 'Sum of items + shipping', '');
+    addStatCard(grid, 'Market Value', '$' + FMT(d.total_market_value), LZ.length + ' items overall', '');
+    addStatCard(grid, 'Est. Net Profit', ((d.total_profit||0) >= 0 ? '+' : '') + '$' + FMT(d.total_profit), 'After eBay fees & shipping', (d.total_profit||0) >= 0 ? 'g' : 'r');
+    
+    if (d.item_breakdown && d.item_breakdown.length) {
+      var bkWrap = EL('div', '', wrap);
+      bkWrap.style.cssText = 'margin-top:20px;border-top:1px solid var(--b);padding-top:14px;text-align:left';
+      EL('h4', '', bkWrap).textContent = '📦 Individual Item Breakdown';
+      for (var k = 0; k < d.item_breakdown.length; k++) {
+        var bit = d.item_breakdown[k];
+        var itRow = EL('div', 'lr', bkWrap);
+        itRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--b);font-size:.85rem';
+        var leftDiv = EL('div', '', itRow);
+        var nmDiv = EL('div', '', leftDiv); nmDiv.style.fontWeight = '600'; nmDiv.textContent = bit.name;
+        var subDiv = EL('div', '', leftDiv); subDiv.style.cssText = 'font-size:.72rem;color:var(--t2)'; subDiv.textContent = bit.sold_count + ' recent sold comps';
+        var rightDiv = EL('div', '', itRow); rightDiv.style.textAlign = 'right';
+        var mVal = EL('div', '', rightDiv); mVal.style.fontWeight = '700'; mVal.textContent = '$' + FMT(bit.market_value);
+        var netVal = EL('div', '', rightDiv); netVal.style.cssText = 'font-size:.72rem;color:' + (bit.net >= 0 ? 'var(--g)' : 'var(--r)'); netVal.textContent = 'Est. Net: ' + (bit.net >= 0 ? '+' : '') + '$' + FMT(bit.net);
+      }
+    }
   } catch(e) { D('lres').innerHTML = '<div class="er on">' + e.message + '</div>'; }
   D('lcalc').textContent = '⚡ Calc';
 };
@@ -1569,8 +1594,9 @@ D('roiCalc').onclick = async function() {
 };
 
 // Photo Upload
+var activePhotoTarget = 'main';
 var lastPhotoFile = null;
-D('camBtn').onclick = function() { D('photoInput').click(); };
+D('camBtn').onclick = function() { activePhotoTarget = 'main'; D('photoInput').click(); };
 D('photoInput').onchange = function() {
   var file = this.files[0];
   if (!file) return;
@@ -1608,14 +1634,14 @@ function analyzePhotoWithContext() {
       D('photoAnalyzeBtn').disabled = false;
       D('photoAnalyzeBtn').textContent = '✨ Re-identify with AI';
       if (d.description && !d.error) D('photoDesc').value = d.description;
-      else { D('photoDesc').value = ''; D('photoDesc').placeholder = 'AI could not identify it. Type the item name manually.'; }
+      else { D('photoDesc').value = ''; D('photoDesc').placeholder = 'AI could not identify it. Type item name manually.'; }
     })
     .catch(function(){
       D('photoDesc').disabled = false;
       D('photoAnalyzeBtn').disabled = false;
       D('photoAnalyzeBtn').textContent = '✨ Identify with AI';
       D('photoDesc').value = '';
-      D('photoDesc').placeholder = 'AI failed. Type the item name manually.';
+      D('photoDesc').placeholder = 'AI failed. Type item name manually.';
     });
 }
 
@@ -1623,10 +1649,18 @@ D('photoAnalyzeBtn').onclick = analyzePhotoWithContext;
 D('photoContext').onkeydown = function(e) { if (e.key === 'Enter') analyzePhotoWithContext(); };
 D('photoCancel').onclick = function() { HIDE('photoOv'); };
 D('photoOv').onclick = function(e) { if (e.target === D('photoOv')) HIDE('photoOv'); };
+
 D('photoSearchBtn').onclick = function() {
   var desc = D('photoDesc').value.trim();
   if (!desc || desc === '🔄 Analyzing image...') return;
-  HIDE('photoOv'); D('q').value = desc; search();
+  HIDE('photoOv');
+  if (activePhotoTarget === 'lot') {
+    D('li').value = desc; D('ladd').onclick();
+  } else if (activePhotoTarget === 'quick') {
+    D('qd').value = desc; rqd();
+  } else {
+    D('q').value = desc; search();
+  }
 };
 
 // Voice Input
@@ -1653,25 +1687,57 @@ D('micBtn').onclick = function() {
   } catch(e) {}
 };
 
-// Barcode Scanner
+// Barcode & Box Scanner
+var activeScanTarget = 'quick';
 var scanStream = null;
 var barcodeDetector = null;
 if ('BarcodeDetector' in window) {
   barcodeDetector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
 }
-D('scanBtn').onclick = async function() {
+
+function startScanFor(target) {
+  activeScanTarget = target;
   SHOW('scanOv'); D('scanSt').textContent = 'Starting camera...';
+  if (D('scanManualInput')) D('scanManualInput').value = '';
   try {
-    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
-    D('scanVid').srcObject = scanStream;
-    D('scanSt').textContent = barcodeDetector ? 'Point camera at a barcode' : 'Barcode scan needs Chrome on Android.';
-    if (barcodeDetector) detectLoop();
-  } catch(err) { D('scanSt').textContent = 'Camera access denied.'; }
-};
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
+      .then(function(stream) {
+        scanStream = stream;
+        D('scanVid').srcObject = scanStream;
+        D('scanSt').textContent = barcodeDetector ? 'Point camera at a barcode' : 'Live video barcode scan works on modern Chrome/Android.';
+        if (barcodeDetector) detectLoop();
+      })
+      .catch(function(err) {
+        D('scanSt').textContent = 'Camera unavailable. Type the UPC below or upload a photo!';
+      });
+  } catch(err) { D('scanSt').textContent = 'Camera unavailable. Type the UPC below or upload a photo!'; }
+}
+
+if (D('mainScanBtn')) D('mainScanBtn').onclick = function() { startScanFor('main'); };
+if (D('scanBtn')) D('scanBtn').onclick = function() { startScanFor('quick'); };
+if (D('lotScanBtn')) D('lotScanBtn').onclick = function() { startScanFor('lot'); };
+
+if (D('scanManualBtn')) {
+  D('scanManualBtn').onclick = function() {
+    var code = D('scanManualInput').value.trim();
+    if (!code) return;
+    stopScan(); lookupBarcode(code);
+  };
+}
+if (D('scanManualInput')) {
+  D('scanManualInput').onkeydown = function(e) { if (e.key === 'Enter') D('scanManualBtn').onclick(); };
+}
+if (D('scanBoxPhotoBtn')) {
+  D('scanBoxPhotoBtn').onclick = function() {
+    activePhotoTarget = activeScanTarget; stopScan(); D('photoInput').click();
+  };
+}
+
 function stopScan() {
   if (scanStream) { scanStream.getTracks().forEach(function(t) { t.stop(); }); scanStream = null; }
   HIDE('scanOv');
 }
+
 function detectLoop() {
   if (!scanStream || !barcodeDetector) return;
   barcodeDetector.detect(D('scanVid')).then(function(barcodes) {
@@ -1682,13 +1748,24 @@ function detectLoop() {
     if (scanStream) requestAnimationFrame(detectLoop);
   }).catch(function() { if (scanStream) requestAnimationFrame(detectLoop); });
 }
+
 async function lookupBarcode(code) {
+  var tit = code;
   try {
-    var r = await fetch('/api/barcode?code=' + code);
+    var r = await fetch('/api/barcode?code=' + encodeURIComponent(code));
     var d = await r.json();
-    D('qd').value = d.title ? (d.brand ? d.brand + ' ' + d.title : d.title) : code;
-    setTimeout(rqd, 500);
-  } catch(e) { D('qd').value = code; setTimeout(rqd, 500); }
+    if (d && d.title) {
+      tit = d.brand ? d.brand + ' ' + d.title : d.title;
+    }
+  } catch(e) {}
+  
+  if (activeScanTarget === 'lot') {
+    D('li').value = tit; D('ladd').onclick();
+  } else if (activeScanTarget === 'quick') {
+    D('qd').value = tit; setTimeout(rqd, 200);
+  } else {
+    D('q').value = tit; search();
+  }
 }
 
 console.log('PriceSpy eBay-only ready');

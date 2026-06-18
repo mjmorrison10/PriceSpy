@@ -801,15 +801,33 @@ def _is_relevant_listing(query: str, title: str) -> bool:
     # title, but the majority should still match.
     return matches >= max(2, int(len(q_tokens) * 0.75 + 0.999))
 
-def _filter_by_relevance(items: list[dict], query: str) -> list[dict]:
-    """Filter eBay/market listings down to titles relevant to the query.
+def _is_barcode_query(query: str) -> bool:
+    clean = query.strip().replace("-", "").replace(" ", "")
+    return clean.isdigit() and len(clean) >= 8
 
-    Two-stage filtering:
-    1) Remove obvious non-matches and replacement parts/accessories.
-    2) If the result set contains exact product/brand phrase matches, prefer
-       those matches. This fixes cases like "Blender Bottle" where generic
-       portable blenders also contain both words but are a different product.
-    """
+def _extract_product_name_from_titles(items: list[dict], query: str) -> str:
+    if not items:
+        return query
+    titles = [it.get("title", "") for it in items if it.get("title")]
+    if not titles:
+        return query
+    clean_titles = sorted(titles, key=len)
+    best = clean_titles[0]
+    for junk in ["BRAND NEW", "NEW", "Free Shipping", "Used", "Boxed", "Complete", "Mint", "TESTED", "In Hand", "Sealed"]:
+        best = re.sub(f"(?i)\\b{junk}\\b", "", best).strip()
+    return best.strip(" -,/|") or titles[0]
+
+def _filter_by_relevance(items: list[dict], query: str) -> list[dict]:
+    """Filter eBay/market listings down to titles relevant to the query."""
+    if _is_barcode_query(query):
+        filtered = []
+        for it in items or []:
+            title = it.get("title", "")
+            if not _is_accessory_or_part_listing(title, "barcode"):
+                it["relevance"] = 1.0
+                filtered.append(it)
+        return filtered
+
     filtered = []
     for it in items or []:
         title = it.get("title", "")
@@ -820,9 +838,6 @@ def _filter_by_relevance(items: list[dict], query: str) -> list[dict]:
     q_tokens = _query_tokens_for_relevance(query)
     if len(q_tokens) >= 2:
         phrase_matches = [it for it in filtered if _strict_phrase_match(query, it.get("title", ""))]
-        # Only switch to strict phrase mode when there are enough exact phrase
-        # matches to support a market estimate, or when the exact phrase is a
-        # meaningful share of the remaining result set.
         if len(phrase_matches) >= 3 or (filtered and len(phrase_matches) / len(filtered) >= 0.35):
             filtered = phrase_matches
 
@@ -1213,6 +1228,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         available_conditions = list(EBAY_COND.keys())
 
     result = {
+        "item_name": _extract_product_name_from_titles(sold_items_raw or active_items_raw, q) if _is_barcode_query(q) else q,
         "query": q,
         "period": period,
         "active_filter_condition": filter_condition or "all",
@@ -1435,6 +1451,96 @@ def api_recalculate():
     })
     result.pop("_cached_at", None)
     return jsonify(result)
+
+
+@app.route("/api/lot-calculate", methods=["POST"])
+def api_lot_calculate():
+    data = request.get_json() or {}
+    items = data.get("items", [])
+    if not items:
+        return jsonify({"error": "No items provided"}), 400
+
+    store_tier = data.get("store_tier", "none").strip().lower()
+    if store_tier not in EBAY_STORE_TIERS:
+        store_tier = "none"
+    shipping_per_item = float(data.get("shipping_per_item", 0) or 0)
+    total_custom_cost = float(data.get("total_lot_cost", 0) or 0)
+
+    total_market = 0.0
+    total_cost = 0.0
+    total_fees = 0.0
+    breakdown = []
+
+    for it in items:
+        name = it.get("name", "").strip()
+        price = float(it.get("price", 0) or 0)
+        if not name:
+            continue
+
+        res = None
+        for k, v in PRICE_CACHE.items():
+            if k.startswith(f"{name.lower()}|") and v.get("sold_summary"):
+                res = v
+                break
+
+        if not res:
+            try:
+                res = _do_search(name, 180, "6m", "all")
+            except Exception:
+                res = {}
+
+        sold_summary = res.get("sold_summary", {})
+        market_val = float(sold_summary.get("median", 0) or 0)
+
+        if market_val <= 0:
+            market_val = price if price > 0 else 0.0
+
+        total_market += market_val
+        total_cost += price
+        
+        fee_rate = 0.1325
+        item_fee = (market_val + shipping_per_item) * fee_rate + 0.30 if market_val > 0 else 0
+        total_fees += item_fee
+
+        item_name_disp = res.get("item_name", name) or name
+        breakdown.append({
+            "name": item_name_disp,
+            "market_value": market_val,
+            "cost": price,
+            "fee": round(item_fee, 2),
+            "net": round(market_val - price - item_fee - shipping_per_item, 2),
+            "sold_count": sold_summary.get("count", 0),
+        })
+
+    if total_custom_cost > 0:
+        total_cost = total_custom_cost
+
+    total_shipping = shipping_per_item * len(items)
+    total_cost_with_ship = total_cost + total_shipping
+    total_profit = total_market - total_cost_with_ship - total_fees
+
+    if total_profit > total_cost_with_ship * 0.4 and total_profit > 25:
+        verdict = "🔥 STRONG LOT BUY"
+        color = "green"
+    elif total_profit > 0:
+        verdict = "👍 GOOD BUNDLE"
+        color = "green"
+    elif total_profit > -15:
+        verdict = "⚠️ BORDERLINE LOT"
+        color = "amber"
+    else:
+        verdict = "🚫 PASS ON THIS LOT"
+        color = "red"
+
+    return jsonify({
+        "verdict": verdict,
+        "verdict_color": color,
+        "total_cost": round(total_cost_with_ship, 2),
+        "total_market_value": round(total_market, 2),
+        "total_fees": round(total_fees, 2),
+        "total_profit": round(total_profit, 2),
+        "item_breakdown": breakdown,
+    })
 
 
 @app.route("/api/status")
@@ -1963,6 +2069,35 @@ def api_barcode():
                         "code": code, "title": name, "brand": brand,
                         "category": product.get("categories", ""), "source": "OpenFoodFacts",
                     })
+    except Exception:
+        pass
+    try:
+        token = _get_ebay_token()
+        if token:
+            url = f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search"
+            r = SESSION.get(url, params={"q": code, "limit": "3"}, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+            if r.status_code == 200 and r.json().get("itemSummaries"):
+                it = r.json()["itemSummaries"][0]
+                title = it.get("title", "")
+                if title:
+                    return jsonify({
+                        "code": code, "title": _extract_product_name_from_titles(r.json()["itemSummaries"], code),
+                        "brand": "", "category": "eBay Search", "source": "eBay Browse API"
+                    })
+    except Exception:
+        pass
+    try:
+        r = SESSION.get(f"https://www.ebay.com/sch/i.html?_nkw={code}", timeout=10)
+        matches = re.findall(r'<div class="s-item__title"><span role="heading" aria-level="3"><!--F#0-->([^<]+)<!--F#1--></span>', r.text)
+        if not matches:
+            matches = re.findall(r'<div class="s-item__title"><span role="heading" aria-level="3">([^<]+)</span>', r.text)
+        for m in matches:
+            if "Shop on eBay" not in m:
+                clean_title = re.sub(r'(?i)\b(NEW|FREE SHIPPING|BRAND NEW)\b', '', m).strip()
+                return jsonify({
+                    "code": code, "title": clean_title,
+                    "brand": "", "category": "eBay Web", "source": "eBay Scraper"
+                })
     except Exception:
         pass
     return jsonify({
