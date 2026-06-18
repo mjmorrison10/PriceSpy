@@ -14,8 +14,14 @@ import random
 import hashlib
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+import logging
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("PriceSpy")
+
+# Token / auth helpers
+from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, render_template, request, send_file, make_response
@@ -224,9 +230,17 @@ def index():
     return resp
 
 # ── eBay OAuth ───────────────────────────────────────────────────────────
+EBAY_TOKEN_CACHE = {"token": None, "expires_at": 0}
+
 def _get_ebay_token() -> str | None:
     if not EBAY_CLIENT_ID or not EBAY_CLIENT_SECRET:
         return None
+    
+    # Check cache
+    now = datetime.now(timezone.utc).timestamp()
+    if EBAY_TOKEN_CACHE["token"] and EBAY_TOKEN_CACHE["expires_at"] > now + 60:
+        return EBAY_TOKEN_CACHE["token"]
+
     creds = base64.b64encode(f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}".encode()).decode()
     try:
         r = SESSION.post(
@@ -236,7 +250,12 @@ def _get_ebay_token() -> str | None:
             timeout=15,
         )
         if r.status_code == 200:
-            return r.json().get("access_token")
+            data = r.json()
+            token = data.get("access_token")
+            expires_in = data.get("expires_in", 7200)
+            EBAY_TOKEN_CACHE["token"] = token
+            EBAY_TOKEN_CACHE["expires_at"] = now + expires_in
+            return token
         print(f"eBay OAuth failed: {r.status_code} {r.text[:200]}")
     except Exception as e:
         print(f"eBay OAuth error: {e}")
@@ -382,10 +401,12 @@ def _ebay_condition_to_canonical(raw: str) -> str:
 
 # ── eBay Sold Data (Finding API) ───────────────────────────────────────
 def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
-    """Real sold/completed listings. Tries Browse API, then Finding API, then HTML fallback."""
-    # Try Browse API first (requires OAuth token)
-    token = _get_ebay_token()
-    if token:
+    """Real sold/completed listings. Tries Browse API and Finding API in parallel."""
+    results = []
+    
+    def fetch_browse():
+        token = _get_ebay_token()
+        if not token: return []
         try:
             filters = ["soldItemOnly:true"]
             if condition != "all" and condition in EBAY_COND:
@@ -401,35 +422,26 @@ def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) ->
             if r.status_code == 200:
                 data = r.json()
                 items = data.get("itemSummaries", [])
-                results = []
+                res = []
                 for it in items:
                     try:
                         price = float(it.get("price", {}).get("value", 0))
-                    except (ValueError, TypeError):
-                        continue
-                    if price <= 0:
-                        continue
-                    cond = _ebay_condition_to_canonical(it.get("condition", ""))
-                    item_end = it.get("itemEndDate", "")
-                    sold_date = item_end[:10] if isinstance(item_end, str) and len(item_end) >= 10 else None
-                    results.append({
-                        "title": it.get("title", ""),
-                        "price": price,
-                        "sold_date": sold_date,
-                        "condition": cond,
-                        "url": it.get("itemWebUrl", ""),
-                        "source": "eBay Browse API",
-                    })
-                if results:
-                    return results
-                print(f"eBay Browse API returned 0 sold items for '{query}'")
-            else:
-                print(f"eBay Browse API sold error: {r.status_code} {r.text[:200]}")
-        except Exception as e:
-            print(f"eBay Browse API sold failed: {e}")
+                        if price <= 0: continue
+                        res.append({
+                            "title": it.get("title", ""),
+                            "price": price,
+                            "sold_date": it.get("itemEndDate", "")[:10],
+                            "condition": _ebay_condition_to_canonical(it.get("condition", "")),
+                            "url": it.get("itemWebUrl", ""),
+                            "source": "eBay Browse API",
+                        })
+                    except Exception: continue
+                return res
+        except Exception: pass
+        return []
 
-    # Fallback to Finding API (only needs App ID / Client ID)
-    if EBAY_CLIENT_ID:
+    def fetch_finding():
+        if not EBAY_CLIENT_ID: return []
         try:
             params = {
                 "OPERATION-NAME": "findCompletedItems",
@@ -451,41 +463,46 @@ def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) ->
             if r.status_code == 200:
                 data = r.json()
                 response = data.get("findCompletedItemsResponse", [{}])[0]
-                ack = response.get("ack", [""])[0]
-                if ack == "Success":
+                if response.get("ack", [""])[0] == "Success":
                     search_res = response.get("searchResult", [{}])
                     items = search_res[0].get("item", []) if search_res and search_res[0] else []
-                    results = []
+                    res = []
                     for it in items:
                         try:
                             price = float(it.get("sellingStatus", [{}])[0].get("currentPrice", [{}])[0].get("__value__", 0))
-                        except (IndexError, KeyError, ValueError, TypeError):
-                            continue
-                        if price <= 0:
-                            continue
-                        cond = _ebay_condition_to_canonical(it.get("condition", [{}])[0].get("conditionDisplayName", "") if it.get("condition") else "")
-                        end_time = it.get("listingInfo", [{}])[0].get("endTime", "")
-                        sold_date = end_time[:10] if isinstance(end_time, str) and len(end_time) >= 10 else None
-                        results.append({
-                            "title": it.get("title", [""])[0],
-                            "price": price,
-                            "sold_date": sold_date,
-                            "condition": cond,
-                            "url": it.get("viewItemURL", [""])[0],
-                            "source": "eBay Finding API",
-                        })
-                    if results:
-                        return results
-                    print(f"eBay Finding API returned 0 sold items for '{query}'")
-                else:
-                    print(f"eBay Finding API ack={ack}: {response}")
-            else:
-                print(f"eBay Finding API error: {r.status_code} {r.text[:200]}")
-        except Exception as e:
-            print(f"eBay Finding API sold failed: {e}")
+                            if price <= 0: continue
+                            res.append({
+                                "title": it.get("title", [""])[0],
+                                "price": price,
+                                "sold_date": it.get("listingInfo", [{}])[0].get("endTime", "")[:10],
+                                "condition": _ebay_condition_to_canonical(it.get("condition", [{}])[0].get("conditionDisplayName", "") if it.get("condition") else ""),
+                                "url": it.get("viewItemURL", [""])[0],
+                                "source": "eBay Finding API",
+                            })
+                        except Exception: continue
+                    return res
+        except Exception: pass
+        return []
 
-    # Last resort: HTML scraping (often blocked by eBay)
-    return _scrape_ebay_sold_fallback(query, condition, limit)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        f1 = executor.submit(fetch_browse)
+        f2 = executor.submit(fetch_finding)
+        
+        r1 = f1.result()
+        r2 = f2.result()
+        
+    # Merge and deduplicate by URL
+    seen_urls = set()
+    for item in r1 + r2:
+        if item["url"] not in seen_urls:
+            results.append(item)
+            seen_urls.add(item["url"])
+            
+    if not results:
+        # Last resort: HTML scraping
+        return _scrape_ebay_sold_fallback(query, condition, limit)
+        
+    return results
 
 def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 60) -> list[dict]:
     """Fallback HTML scraper for eBay sold listings when API is empty or fails."""
@@ -1148,6 +1165,8 @@ def _build_market_explanation(trend, sold_median, active_median, active_count, s
     return " ".join(parts) if parts else "Not enough data to analyze."
 
 # ── Main Search ──────────────────────────────────────────────────────────
+import concurrent.futures
+
 def _do_search(q: str, period_days: int, period: str, filter_condition: str,
                buy_price: float = 0.0, store_tier: str = "none",
                shipping_cost: float = 0.0, promoted_rate: float = 0.0,
@@ -1155,8 +1174,15 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
     now = datetime.now(timezone.utc)
     category = _detect_ebay_category(q, ebay_category_id)
 
-    # 1. Real eBay sold listings
-    sold_items_raw = _ebay_sold_listings(q, filter_condition, limit=100)
+    # Use ThreadPoolExecutor for parallel API calls
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        future_sold = executor.submit(_ebay_sold_listings, q, filter_condition, limit=100)
+        future_active = executor.submit(_ebay_active_listings, q, filter_condition, limit=50)
+        
+        # Parallel fetch
+        sold_items_raw = future_sold.result()
+        active_items_raw = future_active.result()
+
     sold_items = _filter_by_relevance(sold_items_raw, q)
     source_label = "eBay"
     if sold_items_raw and sold_items_raw[0].get("source"):
