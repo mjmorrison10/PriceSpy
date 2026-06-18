@@ -2063,10 +2063,10 @@ def api_identify():
         prompt = _build_gemini_identify_prompt(user_context)
         
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
             response = model.generate_content([image_part, prompt])
         except Exception as e1:
-            print(f"gemini-2.0-flash failed ({e1}), trying gemini-2.5-flash...")
+            print(f"gemini-2.5-flash-lite failed ({e1}), trying gemini-2.5-flash...")
             model = genai.GenerativeModel("gemini-2.5-flash")
             response = model.generate_content([image_part, prompt])
             
