@@ -2019,11 +2019,19 @@ def api_quick_deal():
     })
 
 # ── Photo Identification (Gemini only, no price estimation) ──────────────
-GEMINI_PROMPT = """Identify the product in this image for an eBay resale price search.
-Return ONLY the best searchable product query: brand + model/product type + key variant if visible.
-Do NOT include condition, price, long descriptions, or uncertain filler.
-Examples: "Nintendo Switch OLED", "Nike Air Force 1 White", "iPhone 15 Pro 256GB".
-If you cannot identify it, say "Unknown item"."""
+GEMINI_PROMPT = """You are an expert eBay reseller and flipper sourcing items at a yard sale or liquidation.
+Look at this product or barcode photo and answer: "If I'm looking for this product on eBay, what am I searching for?"
+
+Instructions:
+1. Return ONLY the best, highly specific searchable product query: brand + model/product type + key variant if visible.
+2. Do NOT include words like "condition", "price", "New", "Used", "Boxed", or extra conversational filler.
+3. If the image clearly shows a UPC barcode or serial number, you can also return the exact UPC or model number.
+4. Examples of perfect outputs:
+   - "Nintendo Switch OLED Console White"
+   - "Nike Dunk Low Retro Black White"
+   - "DeWalt DCD791 Brushless Drill"
+   - "Sony WH-1000XM5 Headphones"
+If you truly cannot identify anything searchable, say "Unknown item"."""
 
 def _build_gemini_identify_prompt(user_context: str = "") -> str:
     user_context = (user_context or "").strip()[:500]
@@ -2031,11 +2039,10 @@ def _build_gemini_identify_prompt(user_context: str = "") -> str:
         return GEMINI_PROMPT
     return GEMINI_PROMPT + f"""
 
-User-provided context about the photo:
-{user_context}
+User-provided extra hint about the photo:
+"{user_context}"
 
-Use this context to disambiguate the item, but only if it matches what is visible in the image.
-Still return ONLY the final searchable product query."""
+Combine this hint with the visual evidence to produce the single perfect eBay search title."""
 
 @app.route("/api/identify", methods=["POST"])
 def api_identify():
@@ -2047,20 +2054,29 @@ def api_identify():
     img_bytes = file.read()
     user_context = request.form.get("context", "").strip()
     if not GEMINI_API_KEY:
-        return jsonify({"description": "", "error": "AI analysis not configured."}), 200
+        return jsonify({"description": "", "error": "❌ Gemini API Key missing or invalid in server environment."}), 200
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
         mime_type = file.mimetype or "image/jpeg"
         image_parts = [{"mime_type": mime_type, "data": img_bytes}]
         prompt = _build_gemini_identify_prompt(user_context)
-        response = model.generate_content([image_parts, prompt])
+        
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content([image_parts, prompt])
+        except Exception as e1:
+            print(f"gemini-1.5-flash failed ({e1}), trying gemini-1.5-pro...")
+            model = genai.GenerativeModel("gemini-1.5-pro")
+            response = model.generate_content([image_parts, prompt])
+            
         description = response.text.strip()
+        # Clean up any quotes or markdown
+        description = re.sub(r'^["\']|["\']$', '', description).strip()
         return jsonify({"description": description, "provider": "gemini", "context_used": bool(user_context)})
     except Exception as e:
         print(f"Gemini identification failed: {e}")
-    return jsonify({"description": "", "error": "AI analysis failed. Please describe manually."}), 200
+        return jsonify({"description": "", "error": f"❌ AI analysis failed: {e}"}), 200
 
 # ── Barcode Lookup ───────────────────────────────────────────────────────
 @app.route("/api/barcode")
