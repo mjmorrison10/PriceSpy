@@ -127,7 +127,19 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="cd"><h2>What's it worth on eBay?</h2><div class="sb">Real eBay sold prices, eBay fees, liquidity, and saturation. No fake data.</div>
 <div class="rw"><div class="f1"><input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none"><input type="text" id="q" placeholder='Try "Nintendo Switch OLED" or "iPhone 15 Pro"...' autocomplete="off"></div><button class="bt bt-p" id="camBtn" title="Identify item from photo" style="padding:10px 14px">📷</button><button class="bt bt-p" id="qb">Search</button></div>
 <div class="rw mt1">
-<select id="cond" style="width:170px"><option value="all">All Conditions</option></select>
+<select id="cond" style="width:170px">
+  <option value="all">All Conditions</option>
+  <option value="new">🆕 New</option>
+  <option value="new_other">📦 New Other</option>
+  <option value="new_defects">⚠️ New w/ Defects</option>
+  <option value="manufacturer_refurbished">🔧 Mfr Refurbished</option>
+  <option value="seller_refurbished">🔧 Seller Refurbished</option>
+  <option value="used">👌 Used</option>
+  <option value="very_good">👍 Very Good</option>
+  <option value="good">✅ Good</option>
+  <option value="acceptable">⚠️ Acceptable</option>
+  <option value="for_parts">🔧 For Parts</option>
+</select>
 <select id="storeTier" style="width:150px">
   <option value="none">No eBay Store</option>
   <option value="basic">Basic Store</option>
@@ -207,7 +219,19 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 
 <!-- TITLE OPTIMIZER -->
 <div class="pg" id="pg-title"><div class="cd"><h2>✍️ eBay Title Optimizer</h2><div class="sb">Analyze top-selling eBay titles and get a keyword-optimized title.</div>
-<div class="rw"><div class="f1"><input type="text" id="toq" placeholder='Item, e.g. "iPhone 15 Pro 256GB"'></div><select id="tocond" style="width:150px"><option value="all">All Conditions</option><option value="new">New</option><option value="used">Used</option><option value="very_good">Very Good</option><option value="good">Good</option><option value="acceptable">Acceptable</option></select></div>
+<div class="rw"><div class="f1"><input type="text" id="toq" placeholder='Item, e.g. "iPhone 15 Pro 256GB"'></div><select id="tocond" style="width:150px">
+  <option value="all">All Conditions</option>
+  <option value="new">🆕 New</option>
+  <option value="new_other">📦 New Other</option>
+  <option value="new_defects">⚠️ New w/ Defects</option>
+  <option value="manufacturer_refurbished">🔧 Mfr Refurbished</option>
+  <option value="seller_refurbished">🔧 Seller Refurbished</option>
+  <option value="used">👌 Used</option>
+  <option value="very_good">👍 Very Good</option>
+  <option value="good">✅ Good</option>
+  <option value="acceptable">⚠️ Acceptable</option>
+  <option value="for_parts">🔧 For Parts</option>
+</select></div>
 <div class="rw mt1"><input type="text" id="tocur" placeholder="Your current title (optional)" style="flex:1"><button class="bt bt-p" id="toGo">Optimize</button></div>
 <div id="toRes" class="mt1"></div></div></div>
 
@@ -514,18 +538,20 @@ showPage = function(p) {
 };
 
 function setConds(avail, labels) {
-  if (!avail || !avail.length) return;
   if (labels) { for (var k in labels) { CLAB[k] = labels[k]; } }
   var curr = D('cond').value;
   var sel = D('cond');
   sel.innerHTML = '';
-  var opt = document.createElement('option');
-  opt.value = 'all'; opt.textContent = 'All Conditions'; sel.appendChild(opt);
-  for (var i = 0; i < avail.length; i++) {
-    var c = avail[i];
-    if (c === 'all') continue;
+  var std = ['all', 'new', 'new_other', 'new_defects', 'manufacturer_refurbished', 'seller_refurbished', 'used', 'very_good', 'good', 'acceptable', 'for_parts'];
+  if (avail && avail.length) {
+    for (var i = 0; i < avail.length; i++) {
+      if (std.indexOf(avail[i]) === -1) std.push(avail[i]);
+    }
+  }
+  for (var i = 0; i < std.length; i++) {
+    var c = std[i];
     var o = document.createElement('option');
-    o.value = c; o.textContent = CL(c); sel.appendChild(o);
+    o.value = c; o.textContent = c === 'all' ? 'All Conditions' : CL(c); sel.appendChild(o);
   }
   sel.value = curr;
 }
