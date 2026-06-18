@@ -1,7 +1,9 @@
 // PriceSpy Service Worker
-const CACHE_NAME = 'pricespy-v2';
+const CACHE_NAME = 'pricespy-v3';
 const STATIC_ASSETS = [
   '/',
+  '/static/css/styles.css',
+  '/static/js/app.js',
   '/static/logo.svg?v=2',
   '/static/icon-192.png?v=2',
   '/static/icon-512.png?v=2',

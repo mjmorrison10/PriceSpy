@@ -69,23 +69,53 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 .bn-btn.ac{color:var(--a)}
 .more-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .more-grid button{padding:14px 8px;font-size:.75rem;flex-direction:column;gap:4px;height:auto}
+/* Hivemind Mobile Upgrades */
 @media(max-width:768px){
-  header{padding:8px 10px}
+  header{padding:8px 12px; gap:8px}
   header .hr{display:none}
-  main{padding:12px 8px 120px}
-  .bottom-nav{display:flex}
-  .gd{grid-template-columns:1fr 1fr}
-  .cw{height:220px}
-  input[type=text],input[type=number],select{padding:12px 14px;font-size:1rem}
-  .bt{padding:12px 18px;font-size:.9rem}
-  .pil{padding:8px 12px;font-size:.75rem}
-  .ovc{max-width:100%;width:100%;border-radius:var(--rad) var(--rad) 0 0;max-height:90vh;overflow:auto;padding:16px;padding-bottom:calc(36px + env(safe-area-inset-bottom, 20px))}
+  main{padding:12px 10px 140px} /* Extra bottom padding for safe area */
+  .bottom-nav{display:flex; backdrop-filter: blur(10px); background: rgba(26,29,39,0.9)}
+  .gd{grid-template-columns: 1fr 1fr; gap:10px}
+  .cw{height:240px}
+  
+  /* Prevent iOS zoom on focus */
+  input[type=text],input[type=number],input[type=email],input[type=password],select{
+    font-size: 16px !important;
+    padding: 14px;
+    height: 48px; /* Standard touch target */
+  }
+  
+  .bt{padding:14px 20px; font-size:1rem; min-height: 44px}
+  .pil{padding:10px 16px; font-size:.8rem}
+  
+  .ovc{
+    max-width:100%;
+    width:100%;
+    border-radius:20px 20px 0 0;
+    max-height:92vh;
+    padding:20px;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom, 20px));
+  }
   .ov.on{align-items:flex-end}
-  .lr{padding:12px}
-  .sc{padding:12px}
+  .lr{padding:14px; margin-bottom:8px}
+  .sc{padding:16px}
+  
+  /* Improve list scrolling on mobile */
+  .lscroll {
+    -webkit-overflow-scrolling: touch;
+    max-height: 400px;
+  }
 }
+
+/* Tactile feedback for mobile */
+.bt:active, .pil:active, .bn-btn:active, .lr:active {
+  transform: scale(0.97);
+  opacity: 0.8;
+}
+
 @media(max-width:480px){
   .gd{grid-template-columns:1fr}
-  .logo{font-size:1.1rem}
+  .logo{font-size:1.2rem}
+  .sc .vl{font-size:1.4rem}
 }
 
