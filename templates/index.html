@@ -161,6 +161,8 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
   <button class="bt bt-g ship-pre" style="padding:5px 10px;font-size:.78rem" onclick="setShipPreset(0,this)">Free Ship</button>
   <button class="bt bt-g ship-pre" style="padding:5px 10px;font-size:.78rem" onclick="setShipPreset(6,this)">$6 Ship</button>
   <button class="bt bt-g ship-pre" style="padding:5px 10px;font-size:.78rem" onclick="setShipPreset(12,this)">$12 Ship</button>
+  <span style="color:var(--b);margin:0 4px">|</span>
+  <button class="bt bt-g" style="padding:5px 10px;font-size:.78rem;color:var(--r);border-color:rgba(248,113,113,.3)" onclick="clearAll()">🗑️ Clear All</button>
 </div>
 <div class="rw mt1" style="position:relative">
   <input type="text" id="catSearch" placeholder="eBay category (optional)" style="flex:1" autocomplete="off">
@@ -581,6 +583,29 @@ function ld(o) { D('sp').classList.toggle('on', o); D('st').textContent = o ? 'S
 function er(m) { D('em').textContent = m; D('em').classList.add('on'); }
 function ce() { D('em').classList.remove('on'); }
 
+// Clear All — reset search form, cached data, and results to a clean slate
+function clearAll() {
+  D('q').value = '';
+  D('bp').value = '';
+  D('ship').value = '';
+  D('promo').value = '0';
+  D('cond').value = 'all';
+  D('storeTier').value = 'none';
+  D('catSearch').value = '';
+  D('catId').value = '';
+  D('catSug').style.display = 'none';
+  data = null;
+  D('res').classList.remove('on');
+  D('res').innerHTML = '';
+  ce();
+  // Un-highlight any active preset buttons
+  var bpPresets = document.querySelectorAll('.bp-pre');
+  for (var i=0; i<bpPresets.length; i++) { bpPresets[i].classList.remove('bt-p'); bpPresets[i].classList.add('bt-g'); }
+  var shipPresets = document.querySelectorAll('.ship-pre');
+  for (var i=0; i<shipPresets.length; i++) { shipPresets[i].classList.remove('bt-p'); shipPresets[i].classList.add('bt-g'); }
+  D('q').focus();
+}
+
 async function search(filterCond) {
   var q = D('q').value.trim();
   if (!q) return;
@@ -615,21 +640,53 @@ async function search(filterCond) {
 
 D('qb').onclick = function() { search(); };
 D('q').onkeydown = function(e) { if (e.key === 'Enter') search(); };
-D('cond').onchange = function() { search(); };
+D('cond').onchange = function() { if (data) { recalcFromExistingData(); } else { search(); } };
+
+// When only financial parameters change, recalculate from existing data (no eBay API call)
+D('storeTier').onchange = function() { recalcFromExistingData(); };
+D('promo').onchange = function() { recalcFromExistingData(); };
+D('bp').onchange = function() { recalcFromExistingData(); };
+D('ship').onchange = function() { recalcFromExistingData(); };
+
+async function recalcFromExistingData() {
+  if (!data) { search(); return; }
+  // Update data with current form values, then recalculate without eBay API
+  data.buy_price = parseFloat(D('bp').value) || 0;
+  data.shipping_cost = parseFloat(D('ship').value) || 0;
+  data.store_tier = D('storeTier').value || 'none';
+  data.promoted_rate = parseFloat(D('promo').value) || 0;
+  data.active_filter_condition = D('cond').value || 'all';
+  try {
+    ld(true);
+    var r = await fetch('/api/recalculate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({data: data})
+    });
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Recalculate failed');
+    data = d;
+    renderAll(data);
+  } catch(e) {
+    er(e.message || 'Could not recalculate');
+  } finally {
+    ld(false);
+  }
+}
 
 function setBuyPreset(val, el) {
   D('bp').value = val;
   var btns = document.querySelectorAll('.bp-pre');
   for (var i=0; i<btns.length; i++) { btns[i].classList.remove('bt-p'); btns[i].classList.add('bt-g'); }
   if (el) { el.classList.remove('bt-g'); el.classList.add('bt-p'); }
-  search();
+  recalcFromExistingData();
 }
 function setShipPreset(val, el) {
   D('ship').value = val;
   var btns = document.querySelectorAll('.ship-pre');
   for (var i=0; i<btns.length; i++) { btns[i].classList.remove('bt-p'); btns[i].classList.add('bt-g'); }
   if (el) { el.classList.remove('bt-g'); el.classList.add('bt-p'); }
-  search();
+  recalcFromExistingData();
 }
 
 async function recalcAfterManualDelete() {
@@ -1055,7 +1112,17 @@ async function rqd() {
     if (d.full_result) {
       var fb = EL('button', 'bt bt-p mt1', wrap);
       TXT(fb, '📊 Full Analysis');
-      fb.onclick = function() { data = d.full_result; showPage('search'); renderAll(data); };
+      fb.onclick = function() {
+        data = d.full_result;
+        if (d.your_price) D('bp').value = d.your_price;
+        D('ship').value = parseFloat(D('qds').value) || 0;
+        D('storeTier').value = D('qdst').value;
+        D('q').value = d.item_name || '';
+        if (d.detected_condition) D('cond').value = d.detected_condition;
+        D('promo').value = '0';  // reset ad rate for fresh analysis in search
+        showPage('search');
+        if (data) renderAll(data);
+      };
     }
     if (token && d.verdict) {
       try {
