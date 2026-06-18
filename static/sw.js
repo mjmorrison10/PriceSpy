@@ -1,11 +1,11 @@
 // PriceSpy Service Worker
-const CACHE_NAME = 'pricespy-v1';
+const CACHE_NAME = 'pricespy-v2';
 const STATIC_ASSETS = [
   '/',
-  '/static/logo.svg',
-  '/static/icon-192.png',
-  '/static/icon-512.png',
-  '/static/manifest.json'
+  '/static/logo.svg?v=2',
+  '/static/icon-192.png?v=2',
+  '/static/icon-512.png?v=2',
+  '/static/manifest.json?v=2'
 ];
 
 // Install event - cache static assets
