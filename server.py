@@ -714,15 +714,78 @@ def _relevance_score(query: str, product_title: str) -> float:
     score = recall * 0.75 + length_penalty * 0.10 + phrase_bonus
     return max(0.0, min(1.0, score))
 
+KNOWN_STRICT_PHRASE_PRODUCTS = {
+    # Brand/product phrases where the individual words are too generic on eBay.
+    # "Blender Bottle" is a shaker bottle brand/product; generic USB blenders
+    # and unrelated water bottles should not count as comparable listings.
+    "blenderbottle",
+}
+
+def _strict_phrase_match(query: str, title: str) -> bool:
+    """True when the searched words appear as one product/brand phrase.
+
+    This catches both "Blender Bottle" and "BlenderBottle" while rejecting
+    titles where the words are separated as unrelated descriptors, e.g.
+    "USB Juicer Blender ... Mixer Bottle".
+    """
+    q_tokens = _query_tokens_for_relevance(query)
+    if len(q_tokens) < 2:
+        return False
+    compact_query = "".join(q_tokens)
+    return bool(compact_query and compact_query in _compact(title))
+
+def _requires_strict_phrase(query: str) -> bool:
+    q_tokens = _query_tokens_for_relevance(query)
+    return "".join(q_tokens) in KNOWN_STRICT_PHRASE_PRODUCTS
+
+def _query_is_for_accessory(query: str) -> bool:
+    q = (query or "").lower()
+    accessory_words = {
+        "replacement", "replace", "gasket", "seal", "o-ring", "oring",
+        "lid", "cap", "straw", "part", "parts", "accessory", "accessories",
+        "blade", "blades", "charger", "cable", "case", "cover", "strap",
+    }
+    return any(w in q for w in accessory_words)
+
+def _is_accessory_or_part_listing(title: str, query: str) -> bool:
+    """Exclude replacement parts/accessories unless the user searched for one."""
+    if _query_is_for_accessory(query):
+        return False
+
+    tl = (title or "").lower()
+    tokens = _tokenize(tl)
+
+    # Strong accessory/parts indicators.
+    if any(term in tl for term in [
+        "replacement", "replace ", "for parts", "parts only", "not working",
+        "gasket", "o-ring", "oring", "rubber seal", "sealing ring",
+        "accessory", "accessories",
+    ]):
+        return True
+
+    # Lid/cap/straw/blade listings are usually accessories when paired with
+    # words like only/pack/pcs, but a full product title may legitimately say
+    # "with lid", so keep this conservative.
+    accessory_tokens = {"lid", "cap", "straw", "seal", "washer", "gasket"}
+    quantity_or_only_tokens = {"only", "pack", "pc", "pcs", "piece", "pieces", "set", "kit"}
+    if tokens & accessory_tokens and tokens & quantity_or_only_tokens:
+        return True
+
+    return False
+
 def _is_relevant_listing(query: str, title: str) -> bool:
     """Return True only when a listing title appears to match the searched item.
 
     For multi-word searches we require every important query term to appear,
     allowing joined brand spellings ("blenderbottle" contains both "blender"
-    and "bottle"). This prevents a search like "Blender Bottle" from using
-    Gatorade shaker bottles, Nutribullet blenders, Owala bottles, etc. in the
-    median calculation.
+    and "bottle"). Accessory/replacement-part listings are excluded unless the
+    search itself asks for an accessory.
     """
+    if _is_accessory_or_part_listing(title, query):
+        return False
+    if _requires_strict_phrase(query) and not _strict_phrase_match(query, title):
+        return False
+
     q_tokens = _query_tokens_for_relevance(query)
     if not q_tokens:
         return True
@@ -739,13 +802,30 @@ def _is_relevant_listing(query: str, title: str) -> bool:
     return matches >= max(2, int(len(q_tokens) * 0.75 + 0.999))
 
 def _filter_by_relevance(items: list[dict], query: str) -> list[dict]:
-    """Filter eBay/market listings down to titles relevant to the query."""
+    """Filter eBay/market listings down to titles relevant to the query.
+
+    Two-stage filtering:
+    1) Remove obvious non-matches and replacement parts/accessories.
+    2) If the result set contains exact product/brand phrase matches, prefer
+       those matches. This fixes cases like "Blender Bottle" where generic
+       portable blenders also contain both words but are a different product.
+    """
     filtered = []
     for it in items or []:
         title = it.get("title", "")
         if _is_relevant_listing(query, title):
             it["relevance"] = round(_relevance_score(query, title), 3)
             filtered.append(it)
+
+    q_tokens = _query_tokens_for_relevance(query)
+    if len(q_tokens) >= 2:
+        phrase_matches = [it for it in filtered if _strict_phrase_match(query, it.get("title", ""))]
+        # Only switch to strict phrase mode when there are enough exact phrase
+        # matches to support a market estimate, or when the exact phrase is a
+        # meaningful share of the remaining result set.
+        if len(phrase_matches) >= 3 or (filtered and len(phrase_matches) / len(filtered) >= 0.35):
+            filtered = phrase_matches
+
     return filtered
 
 # ── Utilities ────────────────────────────────────────────────────────────
