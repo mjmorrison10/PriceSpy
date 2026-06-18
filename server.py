@@ -1187,7 +1187,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
     else:
         direction = "stable"
 
-    recent_sold = sorted(sold_filtered, key=lambda x: x.get("sold_date") or "", reverse=True)[:30]
+    recent_sold = sorted(sold_filtered, key=lambda x: x.get("sold_date") or "", reverse=True)
     flip = _analyze_flip(sold_stats, active_stats, sold_filtered, active_filtered,
                          trend, condition_sold, buy_price, category, store_tier,
                          shipping_cost, promoted_rate)
@@ -1227,7 +1227,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         "trend": trend,
         "direction": direction,
         "recent_sold": recent_sold,
-        "active_listings": active_filtered[:20],
+        "active_listings": active_filtered,
         "data_source": data_source,
         "confidence": confidence,
         "confidence_label": {
@@ -1237,6 +1237,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         }.get(confidence, ""),
         "market_note": market_note,
         "flip_analysis": flip,
+        "opportunity": flip.get("opportunity", {}),
         "promoted_impact": promoted_impact,
         "ebay_url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1&LH_Complete=1",
         "total_sold_scraped": len(sold_filtered),
@@ -1305,6 +1306,136 @@ def api_search():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e), "query": q}), 500
+
+@app.route("/api/recalculate", methods=["POST"])
+def api_recalculate():
+    """Recalculate market stats from the currently-visible listing arrays.
+
+    Used by the UI when a user manually removes bad sold/active comps. This
+    avoids another eBay API call and makes the medians/flip analysis update
+    immediately from the human-curated comp set.
+    """
+    payload = request.get_json(silent=True) or {}
+    d = payload.get("data") or payload
+
+    def _as_float(v, default=0.0):
+        try:
+            return float(v or default)
+        except (TypeError, ValueError):
+            return default
+
+    def _clean_items(items):
+        cleaned = []
+        for it in items or []:
+            if not isinstance(it, dict):
+                continue
+            price = _as_float(it.get("price"), 0)
+            if price <= 0:
+                continue
+            cleaned.append({
+                "title": str(it.get("title") or ""),
+                "price": price,
+                "shipping": _as_float(it.get("shipping"), 0),
+                "sold_date": it.get("sold_date"),
+                "condition": it.get("condition") if it.get("condition") in EBAY_COND else "used",
+                "url": str(it.get("url") or ""),
+                "source": it.get("source"),
+                "is_auction": bool(it.get("is_auction")),
+                "relevance": it.get("relevance"),
+            })
+        return cleaned
+
+    q = str(d.get("query") or "").strip()
+    if not q:
+        return jsonify({"error": "Missing query"}), 400
+
+    period = str(d.get("period") or "6m")
+    if period not in PERIOD_DAYS:
+        period = "6m"
+    period_days = PERIOD_DAYS[period]
+
+    filter_condition = str(d.get("active_filter_condition") or "all").strip().lower()
+    if filter_condition not in EBAY_COND and filter_condition != "all":
+        filter_condition = "all"
+
+    buy_price = _as_float(d.get("buy_price"), 0)
+    store_tier = str(d.get("store_tier") or "none").strip().lower()
+    if store_tier not in EBAY_STORE_TIERS:
+        store_tier = "none"
+    shipping_cost = _as_float(d.get("shipping_cost"), 0)
+    promoted_rate = _as_float(d.get("promoted_rate"), 0)
+    ebay_category_id = str(d.get("ebay_category_id") or "")
+    category = str(d.get("category") or "") or _detect_ebay_category(q, ebay_category_id)
+
+    sold_items = _clean_items(d.get("recent_sold"))
+    active_items = _clean_items(d.get("active_listings"))
+
+    sold_filtered = _filter_by_condition(sold_items, filter_condition)
+    active_filtered = _filter_by_condition(active_items, filter_condition)
+
+    sold_stats = _compute_stats(sold_filtered)
+    active_stats = _compute_stats(active_filtered)
+    condition_sold = _stats_by_condition(sold_items)
+    condition_active = _stats_by_condition(active_items)
+
+    median_price = sold_stats.get("median") or active_stats.get("median") or 0
+    trend = _generate_trend(median_price, sold_filtered, period_days)
+    if len(trend) >= 2:
+        first, last = trend[0]["median"], trend[-1]["median"]
+        direction = "rising" if last > first * 1.03 else "falling" if last < first * 0.97 else "stable"
+    else:
+        direction = "stable"
+
+    flip = _analyze_flip(sold_stats, active_stats, sold_filtered, active_filtered,
+                         trend, condition_sold, buy_price, category, store_tier,
+                         shipping_cost, promoted_rate)
+
+    promoted_impact = []
+    if sold_stats.get("median", 0) > 0 and buy_price > 0:
+        for rate in [0, 2, 5, 10]:
+            fc = _calculate_net_profit(sold_stats["median"], buy_price, shipping_cost, category, store_tier, rate)
+            promoted_impact.append({
+                "rate": rate,
+                "net_profit": fc["net_profit"],
+                "net_margin": fc["net_margin_pct"],
+                "promoted_fee": fc["promoted_fee"],
+            })
+
+    available_conditions = [c for c in EBAY_COND if c in condition_sold or c in condition_active]
+    if not available_conditions:
+        available_conditions = d.get("available_conditions") or list(EBAY_COND.keys())
+
+    result = dict(d)
+    result.update({
+        "query": q,
+        "period": period,
+        "active_filter_condition": filter_condition,
+        "available_conditions": available_conditions,
+        "condition_labels": {k: v["label"] for k, v in EBAY_COND.items()},
+        "category": category,
+        "ebay_category_id": ebay_category_id,
+        "sold_summary": sold_stats,
+        "active_summary": active_stats,
+        "condition_sold": condition_sold,
+        "condition_active": condition_active,
+        "trend": trend,
+        "direction": direction,
+        "recent_sold": sorted(sold_filtered, key=lambda x: x.get("sold_date") or "", reverse=True),
+        "active_listings": active_filtered,
+        "flip_analysis": flip,
+        "opportunity": flip.get("opportunity", {}),
+        "promoted_impact": promoted_impact,
+        "total_sold_scraped": len(sold_filtered),
+        "total_active_scraped": len(active_filtered),
+        "market_note": "Manual comp edits applied. Medians and analysis updated from your curated listings.",
+        "buy_price": buy_price if buy_price > 0 else 0,
+        "store_tier": store_tier,
+        "shipping_cost": shipping_cost if shipping_cost > 0 else 0,
+        "promoted_rate": promoted_rate,
+    })
+    result.pop("_cached_at", None)
+    return jsonify(result)
+
 
 @app.route("/api/status")
 def api_status():

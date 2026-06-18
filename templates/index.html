@@ -59,6 +59,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 .lr{padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:5px;background:var(--s);border:1px solid var(--b);border-radius:var(--rs);transition:background .15s}
 .lr:hover{background:var(--s2)}.lr .it{flex:1;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lr .ip{font-weight:700;font-size:.9rem;white-space:nowrap}.lr .ic{font-size:.65rem;color:var(--t2);background:var(--s2);padding:2px 7px;border-radius:10px;white-space:nowrap}.lr .id{font-size:.68rem;color:var(--t2);white-space:nowrap}
+.xdel{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:var(--r);font-size:.78rem;cursor:pointer;flex-shrink:0}.xdel:hover{background:rgba(248,113,113,.2);border-color:var(--r)}
 .ft{text-align:center;padding:16px;color:var(--t2);font-size:.78rem;line-height:1.6;border-top:1px solid var(--b);margin-top:24px;opacity:.8}
 .ft .vt{font-style:italic}.ft .vr{font-size:.68rem;opacity:.6}
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}.ov.on{display:flex}
@@ -567,6 +568,36 @@ D('qb').onclick = function() { search(); };
 D('q').onkeydown = function(e) { if (e.key === 'Enter') search(); };
 D('cond').onchange = function() { search(); };
 
+async function recalcAfterManualDelete() {
+  if (!data) return;
+  try {
+    ld(true);
+    var r = await fetch('/api/recalculate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({data: data})
+    });
+    var d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Recalculate failed');
+    data = d;
+    renderAll(data);
+  } catch(e) {
+    er(e.message || 'Could not recalculate after removing listing');
+  } finally {
+    ld(false);
+  }
+}
+
+function removeListing(kind, idx, ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  if (!data) return;
+  var arr = kind === 'sold' ? (data.recent_sold || []) : (data.active_listings || []);
+  if (idx < 0 || idx >= arr.length) return;
+  arr.splice(idx, 1);
+  if (kind === 'sold') data.recent_sold = arr; else data.active_listings = arr;
+  recalcAfterManualDelete();
+}
+
 // Category search
 var catTimeout = null;
 async function fetchCategories() {
@@ -835,6 +866,9 @@ function buildListings(res, d) {
       var it = d.recent_sold[i];
       var row = EL('div', 'lr', res);
       row.onclick = (function(u) { return function() { window.open(u, '_blank'); }; })(it.url || '#');
+      var del = EL('button', 'xdel', row);
+      del.type = 'button'; del.title = 'Remove this sold comp'; del.textContent = '❌';
+      del.onclick = (function(ix) { return function(ev) { removeListing('sold', ix, ev); }; })(i);
       var tit = EL('span', 'it', row);
       TXT(tit, it.title || '');
       if (it.condition) { var ic = EL('span', 'ic', row); TXT(ic, CL(it.condition)); }
@@ -854,6 +888,9 @@ function buildListings(res, d) {
       var it = d.active_listings[i];
       var row = EL('div', 'lr', res);
       row.onclick = (function(u) { return function() { window.open(u, '_blank'); }; })(it.url || '#');
+      var del = EL('button', 'xdel', row);
+      del.type = 'button'; del.title = 'Remove this active comp'; del.textContent = '❌';
+      del.onclick = (function(ix) { return function(ev) { removeListing('active', ix, ev); }; })(i);
       var tit = EL('span', 'it', row); TXT(tit, it.title || '');
       if (it.condition) { var ic = EL('span', 'ic', row); TXT(ic, CL(it.condition)); }
       var ip = EL('span', 'ip', row); TXT(ip, '$' + FMT(it.price));
