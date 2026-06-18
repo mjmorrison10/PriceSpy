@@ -1305,19 +1305,44 @@ def api_search():
     if not q:
         return jsonify({"error": "Missing query"}), 400
 
-    cache_key = f"{q.lower()}|{period}|{filter_condition}|{buy_price}|{store_tier}|{shipping_cost}|{promoted_rate}|{ebay_category_id}"
-    if cache_key in PRICE_CACHE:
-        cached = PRICE_CACHE[cache_key]
-        age = (datetime.now(timezone.utc) - cached["_cached_at"]).total_seconds()
+    import copy
+    base_cache_key = f"{q.lower()}|{period}|{filter_condition}|{ebay_category_id}"
+    if base_cache_key in PRICE_CACHE:
+        cached = copy.deepcopy(PRICE_CACHE[base_cache_key])
+        age = (datetime.now(timezone.utc) - cached.get("_cached_at", datetime.now(timezone.utc))).total_seconds()
         if age < 300:
             cached["active_filter_condition"] = filter_condition
+            cached["buy_price"] = buy_price if buy_price > 0 else 0
+            cached["store_tier"] = store_tier
+            cached["shipping_cost"] = shipping_cost if shipping_cost > 0 else 0
+            cached["promoted_rate"] = promoted_rate
+            cached["flip_analysis"] = _analyze_flip(
+                cached.get("sold_summary", {}), cached.get("active_summary", {}),
+                cached.get("recent_sold", []), cached.get("active_listings", []),
+                cached.get("trend", []), cached.get("condition_sold", {}),
+                buy_price, cached.get("category", "default"), store_tier,
+                shipping_cost, promoted_rate
+            )
+            cached["opportunity"] = cached["flip_analysis"].get("opportunity", {})
+            sold_median = cached.get("sold_summary", {}).get("median", 0)
+            promoted_impact = []
+            if sold_median > 0 and buy_price > 0:
+                for rate in [0, 2, 5, 10]:
+                    fc = _calculate_net_profit(sold_median, buy_price, shipping_cost, cached.get("category", "default"), store_tier, rate)
+                    promoted_impact.append({
+                        "rate": rate,
+                        "net_profit": fc["net_profit"],
+                        "net_margin": fc["net_margin_pct"],
+                        "promoted_fee": fc["promoted_fee"],
+                    })
+            cached["promoted_impact"] = promoted_impact
             return jsonify(cached)
 
     try:
         result = _do_search(q, period_days, period, filter_condition, buy_price,
                             store_tier, shipping_cost, promoted_rate, ebay_category_id)
         result["_cached_at"] = datetime.now(timezone.utc)
-        PRICE_CACHE[cache_key] = result
+        PRICE_CACHE[base_cache_key] = copy.deepcopy(result)
         return jsonify(result)
     except Exception as e:
         traceback.print_exc()
