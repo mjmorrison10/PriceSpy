@@ -326,6 +326,9 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div id="scanSt" style="text-align:center;padding:4px;font-size:.85rem;color:var(--t2);margin-bottom:10px">Point camera at a barcode</div>
 <button class="bt bt-g" style="width:100%" onclick="stopScan()">Close</button></div></div>
 
+<!-- AI Error Overlay Popup -->
+<div class="ov" id="aiErrorOv"><div class="ovc" style="text-align:center;max-width:380px"><h3>❌ AI Sourcing Error</h3><div id="aiErrorText" style="margin:16px 0;font-size:.95rem;color:var(--r);font-weight:600;word-break:break-word;line-height:1.4"></div><button class="bt bt-p" style="width:100%;padding:14px;font-size:1rem;background:var(--r);color:#fff;border-color:var(--r)" onclick="HIDE('aiErrorOv')">Okay</button></div></div>
+
 <script>
 // ════════════════════════════ FIREBASE ════════════════════════════
 var firebaseConfig = {
@@ -1663,7 +1666,9 @@ function analyzePhotoWithContext() {
       D('photoAnalyzeBtn').disabled = false;
       D('photoAnalyzeBtn').textContent = '✨ Re-scan';
       if (d.error) {
-        D('photoDesc').value = d.error;
+        D('photoDesc').value = '❌ AI Analysis Failed';
+        D('aiErrorText').textContent = d.error;
+        SHOW('aiErrorOv');
       } else if (d.description) {
         D('photoDesc').value = d.description;
       } else {
@@ -1675,7 +1680,9 @@ function analyzePhotoWithContext() {
       D('photoDesc').disabled = false;
       D('photoAnalyzeBtn').disabled = false;
       D('photoAnalyzeBtn').textContent = '✨ Re-scan';
-      D('photoDesc').value = '❌ Network error: ' + err.message;
+      D('photoDesc').value = '❌ Network Error';
+      D('aiErrorText').textContent = 'Network error: ' + err.message;
+      SHOW('aiErrorOv');
     });
 }
 
