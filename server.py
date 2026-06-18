@@ -2071,12 +2071,29 @@ def api_identify():
             response = model.generate_content([image_parts, prompt])
             
         description = response.text.strip()
-        # Clean up any quotes or markdown
         description = re.sub(r'^["\']|["\']$', '', description).strip()
         return jsonify({"description": description, "provider": "gemini", "context_used": bool(user_context)})
     except Exception as e:
         print(f"Gemini identification failed: {e}")
-        return jsonify({"description": "", "error": f"❌ AI analysis failed: {e}"}), 200
+        try:
+            print("Trying free OCR.space backup...")
+            r = requests.post(
+                "https://api.ocr.space/parse/image",
+                files={"file": (file.filename or "img.jpg", img_bytes, mime_type)},
+                data={"apikey": "helloworld", "OCREngine": "2"},
+                timeout=15
+            )
+            if r.status_code == 200:
+                ocr_data = r.json()
+                if ocr_data.get("ParsedResults"):
+                    txt = ocr_data["ParsedResults"][0].get("ParsedText", "").strip()
+                    if txt:
+                        clean_txt = re.sub(r'\s+', ' ', txt)
+                        return jsonify({"description": f"OCR: {clean_txt[:100]}", "provider": "ocr.space", "context_used": bool(user_context)})
+        except Exception as ocr_err:
+            print(f"OCR fallback failed: {ocr_err}")
+            
+        return jsonify({"description": "", "error": f"❌ AI & OCR failed. Please see server logs or type item name manually."}), 200
 
 # ── Barcode Lookup ───────────────────────────────────────────────────────
 @app.route("/api/barcode")

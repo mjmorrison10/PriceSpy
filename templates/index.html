@@ -1661,16 +1661,21 @@ function analyzePhotoWithContext() {
     .then(function(d){
       D('photoDesc').disabled = false;
       D('photoAnalyzeBtn').disabled = false;
-      D('photoAnalyzeBtn').textContent = '✨ Re-identify with AI';
-      if (d.description && !d.error) D('photoDesc').value = d.description;
-      else { D('photoDesc').value = ''; D('photoDesc').placeholder = 'AI could not identify it. Type item name manually.'; }
+      D('photoAnalyzeBtn').textContent = '✨ Re-scan';
+      if (d.error) {
+        D('photoDesc').value = d.error;
+      } else if (d.description) {
+        D('photoDesc').value = d.description;
+      } else {
+        D('photoDesc').value = '';
+        D('photoDesc').placeholder = 'Could not detect product. Type item name manually.';
+      }
     })
-    .catch(function(){
+    .catch(function(err){
       D('photoDesc').disabled = false;
       D('photoAnalyzeBtn').disabled = false;
-      D('photoAnalyzeBtn').textContent = '✨ Identify with AI';
-      D('photoDesc').value = '';
-      D('photoDesc').placeholder = 'AI failed. Type item name manually.';
+      D('photoAnalyzeBtn').textContent = '✨ Re-scan';
+      D('photoDesc').value = '❌ Network error: ' + err.message;
     });
 }
 
