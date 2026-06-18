@@ -60,6 +60,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 .lr:hover{background:var(--s2)}.lr .it{flex:1;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lr .ip{font-weight:700;font-size:.9rem;white-space:nowrap}.lr .ic{font-size:.65rem;color:var(--t2);background:var(--s2);padding:2px 7px;border-radius:10px;white-space:nowrap}.lr .id{font-size:.68rem;color:var(--t2);white-space:nowrap}
 .xdel{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:var(--r);font-size:.78rem;cursor:pointer;flex-shrink:0}.xdel:hover{background:rgba(248,113,113,.2);border-color:var(--r)}
+.lscroll{max-height:275px;overflow-y:auto;padding-right:4px;margin-bottom:10px;scrollbar-width:thin;scrollbar-color:var(--b) transparent}.lscroll::-webkit-scrollbar{width:6px}.lscroll::-webkit-scrollbar-thumb{background:var(--b);border-radius:6px}.lcount{font-size:.68rem;color:var(--t2);margin:-4px 0 8px}
 .ft{text-align:center;padding:16px;color:var(--t2);font-size:.78rem;line-height:1.6;border-top:1px solid var(--b);margin-top:24px;opacity:.8}
 .ft .vt{font-style:italic}.ft .vr{font-size:.68rem;opacity:.6}
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}.ov.on{display:flex}
@@ -862,9 +863,12 @@ function buildListings(res, d) {
   sH.style.cssText = 'font-size:.95rem;margin-bottom:10px';
   TXT(sH, '🟢 Recently Sold');
   if (d.recent_sold && d.recent_sold.length) {
+    var sCount = EL('div', 'lcount', res);
+    TXT(sCount, d.recent_sold.length + ' sold comps used in the average. Scroll to review all; click ❌ to remove bad comps.');
+    var sBox = EL('div', 'lscroll', res);
     for (var i = 0; i < d.recent_sold.length; i++) {
       var it = d.recent_sold[i];
-      var row = EL('div', 'lr', res);
+      var row = EL('div', 'lr', sBox);
       row.onclick = (function(u) { return function() { window.open(u, '_blank'); }; })(it.url || '#');
       var del = EL('button', 'xdel', row);
       del.type = 'button'; del.title = 'Remove this sold comp'; del.textContent = '❌';
@@ -884,9 +888,12 @@ function buildListings(res, d) {
   aH.style.cssText = 'font-size:.95rem;margin-bottom:10px;margin-top:20px';
   TXT(aH, '🔵 Active Listings');
   if (d.active_listings && d.active_listings.length) {
+    var aCount = EL('div', 'lcount', res);
+    TXT(aCount, d.active_listings.length + ' active comps used in the market analysis. Scroll to review all; click ❌ to remove bad comps.');
+    var aBox = EL('div', 'lscroll', res);
     for (var i = 0; i < d.active_listings.length; i++) {
       var it = d.active_listings[i];
-      var row = EL('div', 'lr', res);
+      var row = EL('div', 'lr', aBox);
       row.onclick = (function(u) { return function() { window.open(u, '_blank'); }; })(it.url || '#');
       var del = EL('button', 'xdel', row);
       del.type = 'button'; del.title = 'Remove this active comp'; del.textContent = '❌';
