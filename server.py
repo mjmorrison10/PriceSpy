@@ -2059,16 +2059,16 @@ def api_identify():
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
         mime_type = file.mimetype or "image/jpeg"
-        image_parts = [{"mime_type": mime_type, "data": img_bytes}]
+        image_part = {"mime_type": mime_type, "data": img_bytes}
         prompt = _build_gemini_identify_prompt(user_context)
         
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content([image_parts, prompt])
+            response = model.generate_content([image_part, prompt])
         except Exception as e1:
             print(f"gemini-1.5-flash failed ({e1}), trying gemini-1.5-pro...")
             model = genai.GenerativeModel("gemini-1.5-pro")
-            response = model.generate_content([image_parts, prompt])
+            response = model.generate_content([image_part, prompt])
             
         description = response.text.strip()
         description = re.sub(r'^["\']|["\']$', '', description).strip()
