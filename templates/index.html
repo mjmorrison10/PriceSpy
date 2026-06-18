@@ -274,8 +274,10 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <!-- Photo Upload Modal -->
 <div class="ov" id="photoOv"><div class="ovc"><h3>📷 Identify This Item</h3>
 <img id="photoPreview" src="" alt="Preview" style="width:100%;border-radius:var(--rs);margin-bottom:10px;max-height:240px;object-fit:contain;background:#000;display:none">
-<input type="text" id="photoDesc" placeholder="Describe what's in the photo (e.g. 'Nike Air Force 1 white')" class="mb1">
-<div class="rw"><button class="bt bt-p" id="photoSearchBtn" style="flex:1">🔍 Search This Item</button><button class="bt bt-g" id="photoCancel" style="flex:1">Cancel</button></div></div></div>
+<input type="text" id="photoContext" placeholder="Optional Gemini hint: what are we looking at? e.g. 'shaker bottle, logo says BlenderBottle'" class="mb1">
+<div class="sb" style="margin-bottom:8px">Add context first if the photo is ambiguous, then identify with AI. You can edit the final search text before searching.</div>
+<input type="text" id="photoDesc" placeholder="AI result or manual search text" class="mb1">
+<div class="rw"><button class="bt bt-p" id="photoAnalyzeBtn" style="flex:1">✨ Identify with AI</button><button class="bt bt-p" id="photoSearchBtn" style="flex:1">🔍 Search</button><button class="bt bt-g" id="photoCancel" style="flex:1">Cancel</button></div></div></div>
 
 <!-- Barcode Scan Overlay -->
 <div class="ov" id="scanOv"><div class="ovc"><h3>📷 Scan Barcode</h3>
@@ -1551,27 +1553,48 @@ D('photoInput').onchange = function() {
   reader.onload = function(e) {
     D('photoPreview').src = e.target.result;
     D('photoPreview').style.display = 'block';
-    D('photoDesc').value = '🔄 Analyzing image...';
-    D('photoDesc').disabled = true;
+    D('photoContext').value = '';
+    D('photoDesc').value = '';
+    D('photoDesc').placeholder = 'Click Identify with AI, or type the product name manually';
+    D('photoDesc').disabled = false;
+    D('photoAnalyzeBtn').disabled = false;
+    D('photoAnalyzeBtn').textContent = '✨ Identify with AI';
     SHOW('photoOv');
-    var fd = new FormData();
-    fd.append('image', file);
-    fetch('/api/identify', {method:'POST', body:fd})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        D('photoDesc').disabled = false;
-        if (d.description && !d.error) D('photoDesc').value = d.description;
-        else { D('photoDesc').value = ''; D('photoDesc').placeholder = 'Describe the item...'; }
-      })
-      .catch(function(){
-        D('photoDesc').disabled = false;
-        D('photoDesc').value = '';
-        D('photoDesc').placeholder = 'Describe the item...';
-      });
+    setTimeout(function(){ D('photoContext').focus(); }, 50);
   };
   reader.readAsDataURL(file);
   this.value = '';
 };
+
+function analyzePhotoWithContext() {
+  if (!lastPhotoFile) return;
+  D('photoAnalyzeBtn').disabled = true;
+  D('photoAnalyzeBtn').textContent = '🔄 Analyzing...';
+  D('photoDesc').value = '🔄 Analyzing image...';
+  D('photoDesc').disabled = true;
+  var fd = new FormData();
+  fd.append('image', lastPhotoFile);
+  fd.append('context', D('photoContext').value.trim());
+  fetch('/api/identify', {method:'POST', body:fd})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      D('photoDesc').disabled = false;
+      D('photoAnalyzeBtn').disabled = false;
+      D('photoAnalyzeBtn').textContent = '✨ Re-identify with AI';
+      if (d.description && !d.error) D('photoDesc').value = d.description;
+      else { D('photoDesc').value = ''; D('photoDesc').placeholder = 'AI could not identify it. Type the item name manually.'; }
+    })
+    .catch(function(){
+      D('photoDesc').disabled = false;
+      D('photoAnalyzeBtn').disabled = false;
+      D('photoAnalyzeBtn').textContent = '✨ Identify with AI';
+      D('photoDesc').value = '';
+      D('photoDesc').placeholder = 'AI failed. Type the item name manually.';
+    });
+}
+
+D('photoAnalyzeBtn').onclick = analyzePhotoWithContext;
+D('photoContext').onkeydown = function(e) { if (e.key === 'Enter') analyzePhotoWithContext(); };
 D('photoCancel').onclick = function() { HIDE('photoOv'); };
 D('photoOv').onclick = function(e) { if (e.target === D('photoOv')) HIDE('photoOv'); };
 D('photoSearchBtn').onclick = function() {

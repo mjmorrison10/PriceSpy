@@ -1888,7 +1888,23 @@ def api_quick_deal():
     })
 
 # ── Photo Identification (Gemini only, no price estimation) ──────────────
-GEMINI_PROMPT = """Identify the product in this image. Return ONLY the product name and brand if visible. Examples: "Nintendo Switch OLED", "Nike Air Force 1", "iPhone 15 Pro". If you cannot identify it, say "Unknown item"."""
+GEMINI_PROMPT = """Identify the product in this image for an eBay resale price search.
+Return ONLY the best searchable product query: brand + model/product type + key variant if visible.
+Do NOT include condition, price, long descriptions, or uncertain filler.
+Examples: "Nintendo Switch OLED", "Nike Air Force 1 White", "iPhone 15 Pro 256GB".
+If you cannot identify it, say "Unknown item"."""
+
+def _build_gemini_identify_prompt(user_context: str = "") -> str:
+    user_context = (user_context or "").strip()[:500]
+    if not user_context:
+        return GEMINI_PROMPT
+    return GEMINI_PROMPT + f"""
+
+User-provided context about the photo:
+{user_context}
+
+Use this context to disambiguate the item, but only if it matches what is visible in the image.
+Still return ONLY the final searchable product query."""
 
 @app.route("/api/identify", methods=["POST"])
 def api_identify():
@@ -1898,16 +1914,19 @@ def api_identify():
     if not file:
         return jsonify({"error": "No image provided"}), 400
     img_bytes = file.read()
+    user_context = request.form.get("context", "").strip()
     if not GEMINI_API_KEY:
         return jsonify({"description": "", "error": "AI analysis not configured."}), 200
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel("gemini-1.5-flash")
-        image_parts = [{"mime_type": "image/jpeg", "data": img_bytes}]
-        response = model.generate_content([image_parts, GEMINI_PROMPT])
+        mime_type = file.mimetype or "image/jpeg"
+        image_parts = [{"mime_type": mime_type, "data": img_bytes}]
+        prompt = _build_gemini_identify_prompt(user_context)
+        response = model.generate_content([image_parts, prompt])
         description = response.text.strip()
-        return jsonify({"description": description, "provider": "gemini"})
+        return jsonify({"description": description, "provider": "gemini", "context_used": bool(user_context)})
     except Exception as e:
         print(f"Gemini identification failed: {e}")
     return jsonify({"description": "", "error": "AI analysis failed. Please describe manually."}), 200
