@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v=2">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v=2">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -320,8 +321,8 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 <div class="sb mb1">Use your native phone camera to instantly identify any product box, item, or UPC barcode.</div>
 <button class="bt bt-p mb1" id="scanNativeCamBtn" style="width:100%;font-size:1.05rem;padding:14px;background:var(--a);color:#fff">📷 Snap Photo with Phone Camera</button>
 <div class="rw mb1"><input type="text" id="scanManualInput" placeholder="Type or paste UPC / Model #" autocomplete="off" style="flex:1"><button class="bt bt-p" id="scanManualBtn">Lookup</button></div>
-<div style="border-top:1px solid var(--b);margin:14px 0 10px;padding-top:10px;font-size:.8rem;color:var(--t2)">Live Video Stream Scanner (Chrome / Android):</div>
-<video id="scanVid" autoplay playsinline muted style="width:100%;border-radius:var(--rs);background:#000;max-height:220px;object-fit:cover;margin-bottom:6px"></video>
+<div style="border-top:1px solid var(--b);margin:14px 0 10px;padding-top:10px;font-size:.8rem;color:var(--t2)">Live Video Stream Scanner (Html5Qrcode):</div>
+<div id="scanVidBox" style="width:100%;min-height:220px;max-height:280px;background:#000;border-radius:var(--rs);overflow:hidden;margin-bottom:8px"></div>
 <div id="scanSt" style="text-align:center;padding:4px;font-size:.85rem;color:var(--t2);margin-bottom:10px">Point camera at a barcode</div>
 <button class="bt bt-g" style="width:100%" onclick="stopScan()">Close</button></div></div>
 
@@ -1717,28 +1718,33 @@ D('micBtn').onclick = function() {
 
 // Barcode & Box Scanner
 var activeScanTarget = 'quick';
-var scanStream = null;
-var barcodeDetector = null;
-if ('BarcodeDetector' in window) {
-  barcodeDetector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
-}
+var html5QrCodeScanner = null;
 
 function startScanFor(target) {
   activeScanTarget = target;
-  SHOW('scanOv'); D('scanSt').textContent = 'Starting camera...';
+  SHOW('scanOv'); D('scanSt').textContent = 'Starting live camera scanner...';
   if (D('scanManualInput')) D('scanManualInput').value = '';
-  try {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
-      .then(function(stream) {
-        scanStream = stream;
-        D('scanVid').srcObject = scanStream;
-        D('scanSt').textContent = barcodeDetector ? 'Point camera at a barcode' : 'Live video barcode scan works on modern Chrome/Android.';
-        if (barcodeDetector) detectLoop();
-      })
-      .catch(function(err) {
-        D('scanSt').textContent = 'Camera unavailable. Type the UPC below or upload a photo!';
-      });
-  } catch(err) { D('scanSt').textContent = 'Camera unavailable. Type the UPC below or upload a photo!'; }
+  
+  if (window.Html5Qrcode) {
+    if (!html5QrCodeScanner) {
+      html5QrCodeScanner = new Html5Qrcode("scanVidBox");
+    }
+    html5QrCodeScanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 120 } },
+      function(decodedText, decodedResult) {
+        D('scanSt').textContent = 'Found: ' + decodedText;
+        stopScan(); lookupBarcode(decodedText);
+      },
+      function(errorMessage) {}
+    ).then(function() {
+      D('scanSt').textContent = 'Point camera at a UPC or QR code';
+    }).catch(function(err) {
+      D('scanSt').textContent = 'Live camera restricted. Please use Snap Photo above or type UPC!';
+    });
+  } else {
+    D('scanSt').textContent = 'Scanner library loading. Please use Snap Photo above or type UPC!';
+  }
 }
 
 if (D('mainScanBtn')) D('mainScanBtn').onclick = function() { startScanFor('main'); };
@@ -1762,19 +1768,10 @@ if (D('scanManualInput')) {
 }
 
 function stopScan() {
-  if (scanStream) { scanStream.getTracks().forEach(function(t) { t.stop(); }); scanStream = null; }
+  if (html5QrCodeScanner && html5QrCodeScanner.isScanning) {
+    html5QrCodeScanner.stop().catch(function(){});
+  }
   HIDE('scanOv');
-}
-
-function detectLoop() {
-  if (!scanStream || !barcodeDetector) return;
-  barcodeDetector.detect(D('scanVid')).then(function(barcodes) {
-    if (barcodes.length > 0) {
-      var code = barcodes[0].rawValue;
-      D('scanSt').textContent = 'Found: ' + code; stopScan(); lookupBarcode(code); return;
-    }
-    if (scanStream) requestAnimationFrame(detectLoop);
-  }).catch(function() { if (scanStream) requestAnimationFrame(detectLoop); });
 }
 
 async function lookupBarcode(code) {

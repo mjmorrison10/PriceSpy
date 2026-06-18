@@ -2054,7 +2054,7 @@ def api_identify():
     img_bytes = file.read()
     user_context = request.form.get("context", "").strip()
     if not GEMINI_API_KEY:
-        return jsonify({"description": "", "error": "❌ Gemini API Key missing or invalid in server environment."}), 200
+        return jsonify({"description": "", "error": "❌ Gemini AI API Key not configured! Go to your Render/deployment dashboard → Environment Variables → Add GEMINI_API_KEY (get a free key from aistudio.google.com)."}), 200
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
