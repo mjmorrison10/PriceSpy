@@ -2019,18 +2019,19 @@ def api_quick_deal():
     })
 
 # ── Photo Identification (Gemini only, no price estimation) ──────────────
-GEMINI_PROMPT = """You are an expert eBay reseller and flipper sourcing items at a yard sale or liquidation.
-Look at this product or barcode photo and answer: "If I'm looking for this product on eBay, what am I searching for?"
+GEMINI_PROMPT = """Identify this product precisely — brand, model name/number, colorway/variant, and any distinguishing features visible.
 
-Instructions:
-1. Return ONLY the best, highly specific searchable product query: brand + model/product type + key variant if visible.
-2. Do NOT include words like "condition", "price", "New", "Used", "Boxed", or extra conversational filler.
-3. If the image clearly shows a UPC barcode or serial number, you can also return the exact UPC or model number.
-4. Examples of perfect outputs:
-   - "Nintendo Switch OLED Console White"
-   - "Nike Dunk Low Retro Black White"
-   - "DeWalt DCD791 Brushless Drill"
-   - "Sony WH-1000XM5 Headphones"
+Return ONLY the specific product identifier that an eBay seller would use to find comparable sold listings, in this format:
+  Brand + Model/Product Name + Key Variant
+
+Rules:
+- Do NOT include words like "condition", "price", "New", "Used", "Boxed", or extra conversational filler.
+- If the image clearly shows a UPC barcode or serial number, you can include that or return the exact model number.
+- Examples of perfect outputs:
+  - "Nintendo Switch OLED Console White"
+  - "Nike Dunk Low Retro Black White"
+  - "DeWalt DCD791 Brushless Drill"
+  - "Sony WH-1000XM5 Headphones"
 If you truly cannot identify anything searchable, say "Unknown item"."""
 
 def _build_gemini_identify_prompt(user_context: str = "") -> str:
