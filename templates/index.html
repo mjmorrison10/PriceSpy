@@ -66,7 +66,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}.ov.on{display:flex}
 .ovc{background:var(--s);border:1px solid var(--b);border-radius:var(--rad);padding:20px;max-width:440px;width:90%}.ovc h3{margin-bottom:8px}
 .mt1{margin-top:8px}.mb1{margin-bottom:8px}
-.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--s);border-top:1px solid var(--b);padding:6px 0;padding-bottom:env(safe-area-inset-bottom,6px);z-index:100;justify-content:space-around}
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--s);border-top:1px solid var(--b);padding:8px 0;padding-bottom:calc(26px + env(safe-area-inset-bottom, 16px));z-index:100;justify-content:space-around}
 .bottom-nav.on{display:flex}
 .bn-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--t2);font-size:.65rem;flex:1;padding:6px 0;cursor:pointer}
 .bn-btn span{font-size:1.2rem}
@@ -76,14 +76,14 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 @media(max-width:768px){
   header{padding:8px 10px}
   header .hr{display:none}
-  main{padding:12px 8px 80px}
+  main{padding:12px 8px 120px}
   .bottom-nav{display:flex}
   .gd{grid-template-columns:1fr 1fr}
   .cw{height:220px}
   input[type=text],input[type=number],select{padding:12px 14px;font-size:1rem}
   .bt{padding:12px 18px;font-size:.9rem}
   .pil{padding:8px 12px;font-size:.75rem}
-  .ovc{max-width:100%;width:100%;border-radius:var(--rad) var(--rad) 0 0;max-height:90vh;overflow:auto;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .ovc{max-width:100%;width:100%;border-radius:var(--rad) var(--rad) 0 0;max-height:90vh;overflow:auto;padding:16px;padding-bottom:calc(36px + env(safe-area-inset-bottom, 20px))}
   .ov.on{align-items:flex-end}
   .lr{padding:12px}
   .sc{padding:12px}
@@ -275,7 +275,7 @@ input:focus,select:focus{border-color:var(--a)}select option{background:var(--s)
 
 <!-- Mobile More Menu -->
 <div class="ov" id="moreOv" style="align-items:flex-end;justify-content:flex-end">
-<div class="ovc" id="moreMenu" style="max-width:100%;width:100%;border-radius:var(--rad) var(--rad) 0 0;max-height:80vh;overflow:auto;padding-bottom:30px">
+<div class="ovc" id="moreMenu" style="max-width:100%;width:100%;border-radius:var(--rad) var(--rad) 0 0;max-height:80vh;overflow:auto">
 <h3 style="margin-bottom:12px">More</h3>
 <div class="more-grid" id="moreGrid"></div>
 <button class="bt bt-g" style="width:100%;margin-top:12px" onclick="HIDE('moreOv')">Close</button>
