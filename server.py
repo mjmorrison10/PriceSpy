@@ -655,19 +655,98 @@ def _tokenize(s: str) -> set[str]:
              "and", "or", "is", "are", "was", "were", "be", "been", "being",
              "it", "its", "this", "that", "these", "those", "edition", "version"}
     tokens = re.findall(r'[a-z0-9]+', s.lower())
-    return {t for t in tokens if t not in noise and len(t) > 1}
+    return {_singularize(t) for t in tokens if t not in noise and len(t) > 1}
+
+def _singularize(token: str) -> str:
+    """Tiny normalizer so bottle/bottles and box/boxes compare the same."""
+    token = (token or "").lower()
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 4 and token.endswith(("ches", "shes", "xes", "sses", "zes")):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s"):
+        return token[:-1]
+    return token
+
+def _compact(s: str) -> str:
+    return re.sub(r'[^a-z0-9]+', '', (s or '').lower())
+
+def _query_tokens_for_relevance(query: str) -> list[str]:
+    """Tokens that should be present in matching eBay titles.
+
+    eBay keyword search is intentionally broad; it may return adjacent products
+    that match only one word in the query.  We keep meaningful user terms and
+    drop listing filler words so stats are built from the product actually
+    searched for.
+    """
+    weak = {
+        "new", "used", "open", "box", "lot", "bundle", "set", "pack", "pair",
+        "sale", "sold", "listing", "item", "free", "shipping", "authentic",
+        "genuine", "original", "official", "read", "please", "condition",
+    }
+    raw = re.findall(r'[a-z0-9]+', (query or '').lower())
+    return [_singularize(t) for t in raw if len(t) > 1 and t not in weak]
+
+def _title_contains_token(title_tokens: set[str], compact_title: str, token: str) -> bool:
+    # Exact token match catches normal titles; compact substring catches brands
+    # written together, e.g. "BlenderBottle" for query "Blender Bottle".
+    return token in title_tokens or token in compact_title
 
 def _relevance_score(query: str, product_title: str) -> float:
-    q_tokens = _tokenize(query)
+    q_tokens = _query_tokens_for_relevance(query)
     p_tokens = _tokenize(product_title)
     if not q_tokens:
-        return 0.0
-    overlap = q_tokens & p_tokens
-    recall = len(overlap) / len(q_tokens)
-    length_penalty = min(1.0, 10 / max(len(p_tokens), 1))
-    substring_bonus = 0.3 if query.lower() in product_title.lower() else 0.0
-    score = recall * 0.6 + length_penalty * 0.2 + substring_bonus
+        return 1.0
+
+    compact_query = _compact(query)
+    compact_title = _compact(product_title)
+    matched = [t for t in q_tokens if _title_contains_token(p_tokens, compact_title, t)]
+    recall = len(matched) / len(q_tokens)
+
+    # Strong bonus for exact phrase or joined brand spelling.
+    phrase_bonus = 0.0
+    if compact_query and compact_query in compact_title:
+        phrase_bonus = 0.35
+
+    # Mild penalty for very noisy titles, but don't over-penalize legitimate
+    # detailed listings.
+    length_penalty = min(1.0, 12 / max(len(p_tokens), 1))
+    score = recall * 0.75 + length_penalty * 0.10 + phrase_bonus
     return max(0.0, min(1.0, score))
+
+def _is_relevant_listing(query: str, title: str) -> bool:
+    """Return True only when a listing title appears to match the searched item.
+
+    For multi-word searches we require every important query term to appear,
+    allowing joined brand spellings ("blenderbottle" contains both "blender"
+    and "bottle"). This prevents a search like "Blender Bottle" from using
+    Gatorade shaker bottles, Nutribullet blenders, Owala bottles, etc. in the
+    median calculation.
+    """
+    q_tokens = _query_tokens_for_relevance(query)
+    if not q_tokens:
+        return True
+
+    title_tokens = _tokenize(title)
+    compact_title = _compact(title)
+    matches = sum(1 for t in q_tokens if _title_contains_token(title_tokens, compact_title, t))
+
+    if len(q_tokens) <= 2:
+        return matches == len(q_tokens)
+
+    # Longer searches can include descriptors/model words not present in every
+    # title, but the majority should still match.
+    return matches >= max(2, int(len(q_tokens) * 0.75 + 0.999))
+
+def _filter_by_relevance(items: list[dict], query: str) -> list[dict]:
+    """Filter eBay/market listings down to titles relevant to the query."""
+    filtered = []
+    for it in items or []:
+        title = it.get("title", "")
+        if _is_relevant_listing(query, title):
+            it["relevance"] = round(_relevance_score(query, title), 3)
+            filtered.append(it)
+    return filtered
 
 # ── Utilities ────────────────────────────────────────────────────────────
 def _clean_price(txt):
@@ -982,13 +1061,14 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
     category = _detect_ebay_category(q, ebay_category_id)
 
     # 1. Real eBay sold listings
-    sold_items = _ebay_sold_listings(q, filter_condition, limit=100)
+    sold_items_raw = _ebay_sold_listings(q, filter_condition, limit=100)
+    sold_items = _filter_by_relevance(sold_items_raw, q)
     source_label = "eBay"
-    if sold_items and sold_items[0].get("source"):
-        source_label = sold_items[0]["source"].replace("eBay ", "")
-    data_source = f"eBay Sold Listings ({len(sold_items)} items via {source_label})"
+    if sold_items_raw and sold_items_raw[0].get("source"):
+        source_label = sold_items_raw[0]["source"].replace("eBay ", "")
+    data_source = f"eBay Sold Listings ({len(sold_items)} relevant of {len(sold_items_raw)} items via {source_label})"
     confidence = "high" if len(sold_items) >= 5 else "medium" if len(sold_items) > 0 else "low"
-    market_note = "Real sold prices from eBay" if sold_items else "No recent eBay sold listings found."
+    market_note = "Real sold prices from eBay, filtered for title relevance" if sold_items else "No relevant recent eBay sold listings found."
 
     # 2. PriceCharting fallback for games
     if not sold_items and ENABLE_PRICECHARTING and _is_gaming_query(q):
@@ -997,15 +1077,16 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
             if products and products[0].get("relevance", 0) >= 0.3:
                 pc_data = _scrape_pricecharting_detail(products[0]["url"])
                 if pc_data and pc_data.get("sold_listings"):
-                    sold_items = pc_data["sold_listings"]
-                    data_source = f"PriceCharting — {products[0]['title']}"
+                    sold_items = _filter_by_relevance(pc_data["sold_listings"], q)
+                    data_source = f"PriceCharting — {products[0]['title']} ({len(sold_items)} relevant listings)"
                     confidence = "medium"
-                    market_note = "PriceCharting game data (verify on eBay)."
+                    market_note = "PriceCharting game data, filtered for title relevance (verify on eBay)."
         except Exception:
             pass
 
     # 3. Real eBay active listings
-    active_items = _ebay_active_listings(q, filter_condition, limit=50)
+    active_items_raw = _ebay_active_listings(q, filter_condition, limit=50)
+    active_items = _filter_by_relevance(active_items_raw, q)
 
     # Filter
     sold_filtered = _filter_by_condition(sold_items, filter_condition)
@@ -1080,6 +1161,8 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         "ebay_url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1&LH_Complete=1",
         "total_sold_scraped": len(sold_filtered),
         "total_active_scraped": len(active_filtered),
+        "total_sold_before_relevance_filter": len(sold_items_raw),
+        "total_active_before_relevance_filter": len(active_items_raw),
         "buy_price": buy_price if buy_price > 0 else 0,
         "store_tier": store_tier,
         "shipping_cost": shipping_cost if shipping_cost > 0 else 0,
