@@ -1049,12 +1049,27 @@ async function rqd() {
   D('qdg').textContent = 'Analyze';
 }
 
+function showToast(msg, type) {
+  var tc = D('toastContainer');
+  if (!tc) return;
+  var el = document.createElement('div');
+  el.className = 'toast ' + (type || 'info');
+  var icon = type === 'success' ? '✅ ' : (type === 'error' ? '❌ ' : 'ℹ️ ');
+  el.textContent = icon + msg;
+  tc.appendChild(el);
+  setTimeout(function() {
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 0.3s';
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+  }, 3000);
+}
+
 // Watchlist
 async function loadWl() {
-  if (!token) { D('wl').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
+  if (!token) { D('wl').innerHTML = '<div class="empty-state"><h3>👤 Login Required</h3><p>Log in to monitor market prices and track items.</p><button class="bt bt-p" onclick="SHOW(\'authOv\')">Log In / Sign Up</button></div>'; return; }
   try {
     var items = await fetch('/api/watchlist?token=' + getToken()).then(function(r) { return r.json(); });
-    if (!items || !items.length) { D('wl').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No items watched.</div>'; return; }
+    if (!items || !items.length) { D('wl').innerHTML = '<div class="empty-state"><h3>⭐ No Tracked Items Yet</h3><p>Search for any product and click \'Track Price\' to monitor market value.</p><button class="bt bt-p" onclick="showPage(\'search\')">🔍 Start Searching</button></div>'; return; }
     D('wl').innerHTML = '';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
@@ -1069,13 +1084,13 @@ async function loadWl() {
     }
   } catch(e) { D('wl').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
-async function delWl(id) { await fetch('/api/watchlist/' + id + '?token=' + getToken(), {method:'DELETE'}); loadWl(); }
-D('wref').onclick = async function() { await fetch('/api/watchlist/refresh-all?token=' + getToken(), {method:'POST'}); loadWl(); };
+async function delWl(id) { await fetch('/api/watchlist/' + id + '?token=' + getToken(), {method:'DELETE'}); loadWl(); showToast('Item removed from watchlist', 'info'); }
+D('wref').onclick = async function() { await fetch('/api/watchlist/refresh-all?token=' + getToken(), {method:'POST'}); loadWl(); showToast('Watchlist refreshed', 'success'); };
 
 // Inventory
 D('invAdd').onclick = function() { SHOW('invOv'); };
 async function loadInv() {
-  if (!token) { D('inv').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
+  if (!token) { D('inv').innerHTML = '<div class="empty-state"><h3>👤 Login Required</h3><p>Log in to track your flipping inventory and deals.</p><button class="bt bt-p" onclick="SHOW(\'authOv\')">Log In / Sign Up</button></div>'; return; }
   try {
     var r1 = await fetch('/api/inventory?token=' + getToken());
     var r2 = await fetch('/api/inventory/stats?token=' + getToken());
@@ -1088,7 +1103,7 @@ async function loadInv() {
       addStatCard(D('invStats'), '💰 Sold', String(s.sold), '$' + FMT(s.sold_revenue) + ' revenue', '');
       addStatCard(D('invStats'), '💵 Profit', ((s.sold_profit || 0) >= 0 ? '+' : '') + '$' + FMT(s.sold_profit), '', (s.sold_profit || 0) >= 0 ? 'g' : 'r');
     }
-    if (!items || !items.length) { D('inv').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No items yet.</div>'; return; }
+    if (!items || !items.length) { D('inv').innerHTML = '<div class="empty-state"><h3>📦 No Inventory Items Yet</h3><p>Track your inventory purchases, listings, and sales profits.</p><button class="bt bt-p" onclick="D(\'invAdd\').click()">+ Track Your First Item</button></div>'; return; }
     D('inv').innerHTML = '';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
@@ -1109,12 +1124,12 @@ async function loadInv() {
     }
   } catch(e) { D('inv').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Could not load.</div>'; }
 }
-async function delInv(id) { await fetch('/api/inventory/' + id + '?token=' + getToken(), {method:'DELETE'}); loadInv(); }
+async function delInv(id) { await fetch('/api/inventory/' + id + '?token=' + getToken(), {method:'DELETE'}); loadInv(); showToast('Inventory item deleted', 'info'); }
 D('isave').onclick = async function() {
   var b = {item_name:D('in').value.trim(), buy_price:parseFloat(D('ibp').value)||0, platform:'ebay', condition:D('icond').value.trim(), status:D('istat').value, sold_price:parseFloat(D('isp').value)||0};
   if (!b.item_name) return;
   await fetch('/api/inventory?token=' + getToken(), {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b)});
-  HIDE('invOv'); loadInv();
+  HIDE('invOv'); loadInv(); showToast('Item saved to inventory', 'success');
 };
 D('csvBtn').onclick = async function() {
   var items = await fetch('/api/inventory?token=' + getToken()).then(function(r) { return r.json(); });
@@ -1122,6 +1137,7 @@ D('csvBtn').onclick = async function() {
   var b = new Blob([csv], {type:'text/csv'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(b); a.download = 'inventory.csv'; a.click();
+  showToast('Inventory CSV downloaded', 'success');
 };
 
 // Lot Calculator
@@ -1193,10 +1209,10 @@ D('lcalc').onclick = async function() {
 
 // Deal History
 async function loadDh() {
-  if (!token) { D('dh').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">Login first.</div>'; return; }
+  if (!token) { D('dh').innerHTML = '<div class="empty-state"><h3>👤 Login Required</h3><p>Log in to view your scan history and evaluated flips.</p><button class="bt bt-p" onclick="SHOW(\'authOv\')">Log In / Sign Up</button></div>'; return; }
   try {
     var items = await fetch('/api/deal-history?token=' + getToken()).then(function(r) { return r.json(); });
-    if (!items || !items.length) { D('dh').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No deals scanned.</div>'; return; }
+    if (!items || !items.length) { D('dh').innerHTML = '<div class="empty-state"><h3>⚡ No Scan History Yet</h3><p>Use Quick Scan or Barcode Scanner to evaluate flipping deals.</p><button class="bt bt-p" onclick="showPage(\'quick\')">⚡ Try Quick Scan</button></div>'; return; }
     D('dh').innerHTML = '';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
@@ -1215,7 +1231,7 @@ async function loadDh() {
 async function loadTr() {
   try {
     var items = await fetch('/api/trending').then(function(r) { return r.json(); });
-    if (!items || !items.length) { D('tr').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t2)">No data yet.</div>'; return; }
+    if (!items || !items.length) { D('tr').innerHTML = '<div class="empty-state"><h3>📈 No Trending Data Yet</h3><p>Trending market searches will appear here as users search.</p></div>'; return; }
     D('tr').innerHTML = '';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
