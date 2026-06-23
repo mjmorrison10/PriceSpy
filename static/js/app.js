@@ -869,7 +869,7 @@ function buildFlip(res, d) {
   if (fc2.platform) {
     var feeDiv = EL('div', '', cd);
     feeDiv.style.cssText = 'margin-top:10px;padding-top:10px;border-top:1px solid var(--b);font-size:.75rem;color:var(--t2)';
-    TXT(feeDiv, '\ud83d\udccb ' + fc2.platform + ' FVF ' + fc2.fvf_pct + '% = $' + FMT(fc2.fvf) + ' | Total fees: $' + FMT(fc2.total_fees) + ' | Net: $' + FMT(fc2.net_profit));
+    TXT(feeDiv, '\ud83d\udccb ' + fc2.platform + ' FVF ' + fc2.fvf_pct + '% = $' + FMT(fc2.fvf) + ' | Total fees: $' + FMT(fc2.total_fees) + (fc2.shipping_cost > 0 ? ' | Ship: $' + FMT(fc2.shipping_cost) : '') + ' | Net: $' + FMT(fc2.net_profit));
   }
 }
 
@@ -1605,57 +1605,118 @@ D('roiCalc').onclick = async function() {
 
 // Photo Upload
 var activePhotoTarget = 'main';
-var lastPhotoFile = null;
-D('camBtn').onclick = function() { activePhotoTarget = 'main'; D('photoInput').click(); };
-D('photoInput').onchange = function() {
-  var file = this.files[0];
-  if (!file) return;
-  lastPhotoFile = file;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    D('photoPreview').src = e.target.result;
-    D('photoPreview').style.display = 'block';
-    D('photoContext').value = '';
-    D('photoDesc').value = '';
-    D('photoDesc').placeholder = 'AI is analyzing your photo...';
-    D('photoDesc').disabled = false;
+var selectedPhotoFiles = [];
+
+function openPhotoModal(target) {
+  activePhotoTarget = target || 'main';
+  selectedPhotoFiles = [];
+  var container = D('photoThumbnails');
+  if (container) container.innerHTML = '';
+  if (D('photoContext')) D('photoContext').value = '';
+  if (D('photoDesc')) D('photoDesc').value = '';
+  if (D('photoResWrap')) D('photoResWrap').style.display = 'none';
+  if (D('photoInitialClose')) D('photoInitialClose').style.display = 'block';
+  if (D('photoAnalyzeBtn')) {
     D('photoAnalyzeBtn').disabled = false;
-    D('photoAnalyzeBtn').textContent = '✨ Re-scan';
-    SHOW('photoOv');
-    setTimeout(analyzePhotoWithContext, 100);
+    D('photoAnalyzeBtn').textContent = '✨ Analyze with Gemini';
+  }
+  SHOW('photoOv');
+}
+
+function updatePhotoThumbnails() {
+  var container = D('photoThumbnails');
+  if (!container) return;
+  container.innerHTML = '';
+  for (var i = 0; i < selectedPhotoFiles.length; i++) {
+    (function(idx, file) {
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;width:60px;height:60px;border-radius:6px;overflow:hidden;background:#000;border:1px solid var(--b);display:inline-block';
+      var img = document.createElement('img');
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+      var reader = new FileReader();
+      reader.onload = function(e) { img.src = e.target.result; };
+      reader.readAsDataURL(file);
+      wrap.appendChild(img);
+
+      var del = document.createElement('button');
+      del.innerHTML = '✕';
+      del.style.cssText = 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.7);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0';
+      del.onclick = function(e) {
+        e.stopPropagation();
+        selectedPhotoFiles.splice(idx, 1);
+        updatePhotoThumbnails();
+      };
+      wrap.appendChild(del);
+      container.appendChild(wrap);
+    })(i, selectedPhotoFiles[i]);
+  }
+}
+
+if (D('camBtn')) D('camBtn').onclick = function() { openPhotoModal('main'); };
+
+if (D('modalCamBtn')) {
+  D('modalCamBtn').onclick = function() { if (D('photoCamInput')) D('photoCamInput').click(); };
+}
+if (D('modalRollBtn')) {
+  D('modalRollBtn').onclick = function() { if (D('photoRollInput')) D('photoRollInput').click(); };
+}
+
+if (D('photoCamInput')) {
+  D('photoCamInput').onchange = function() {
+    if (this.files && this.files[0]) {
+      selectedPhotoFiles.push(this.files[0]);
+      updatePhotoThumbnails();
+    }
+    this.value = '';
   };
-  reader.readAsDataURL(file);
-  this.value = '';
-};
+}
+if (D('photoRollInput')) {
+  D('photoRollInput').onchange = function() {
+    if (this.files) {
+      for (var i = 0; i < this.files.length; i++) {
+        selectedPhotoFiles.push(this.files[i]);
+      }
+      updatePhotoThumbnails();
+    }
+    this.value = '';
+  };
+}
 
 function analyzePhotoWithContext() {
-  if (!lastPhotoFile) return;
+  if (!selectedPhotoFiles.length) {
+    alert('Please add at least one photo first!');
+    return;
+  }
   D('photoAnalyzeBtn').disabled = true;
   D('photoAnalyzeBtn').textContent = '🔄 Analyzing...';
-  D('photoDesc').value = '🔄 Analyzing image...';
-  D('photoDesc').disabled = true;
+  if (D('photoDesc')) {
+    D('photoDesc').value = '🔄 Analyzing image(s)...';
+    D('photoDesc').disabled = true;
+  }
   var fd = new FormData();
-  fd.append('image', lastPhotoFile);
+  for (var i = 0; i < selectedPhotoFiles.length; i++) {
+    fd.append('images', selectedPhotoFiles[i]);
+  }
   fd.append('context', D('photoContext').value.trim());
   fetch('/api/identify', {method:'POST', body:fd})
     .then(function(r){ return r.json(); })
     .then(function(d){
-      D('photoDesc').disabled = false;
+      if (D('photoDesc')) D('photoDesc').disabled = false;
       D('photoAnalyzeBtn').disabled = false;
       D('photoAnalyzeBtn').textContent = '✨ Re-scan';
       if (d.error) {
-        D('photoDesc').value = '❌ AI Analysis Failed';
+        if (D('photoDesc')) D('photoDesc').value = '❌ AI Analysis Failed';
         D('aiErrorText').textContent = d.error;
         SHOW('aiErrorOv');
         lastPhotoEstimate = null;
       } else if (d.description) {
-        D('photoDesc').value = d.description;
-        // Auto-estimate shipping in the background; the user can still
-        // override the ship field manually before clicking "Run eBay Search".
+        if (D('photoResWrap')) D('photoResWrap').style.display = 'block';
+        if (D('photoInitialClose')) D('photoInitialClose').style.display = 'none';
+        if (D('photoDesc')) D('photoDesc').value = d.description;
         lastPhotoEstimate = null;
         estimateShipping({
           itemName: d.description,
-          shipFieldId: 'ship',  // used only to compute the value; applied on submit
+          shipFieldId: 'ship',
           badgeId: null,
           quiet: true,
           onSuccess: function(est) {
@@ -1663,30 +1724,34 @@ function analyzePhotoWithContext() {
           },
         });
       } else {
-        D('photoDesc').value = '';
-        D('photoDesc').placeholder = 'Could not detect product. Type item name manually.';
+        if (D('photoResWrap')) D('photoResWrap').style.display = 'block';
+        if (D('photoInitialClose')) D('photoInitialClose').style.display = 'none';
+        if (D('photoDesc')) {
+          D('photoDesc').value = '';
+          D('photoDesc').placeholder = 'Could not detect product. Type item name manually.';
+        }
         lastPhotoEstimate = null;
       }
     })
     .catch(function(err){
-      D('photoDesc').disabled = false;
+      if (D('photoDesc')) D('photoDesc').disabled = false;
       D('photoAnalyzeBtn').disabled = false;
       D('photoAnalyzeBtn').textContent = '✨ Re-scan';
-      D('photoDesc').value = '❌ Network Error';
+      if (D('photoDesc')) D('photoDesc').value = '❌ Network Error';
       D('aiErrorText').textContent = 'Network error: ' + err.message;
       SHOW('aiErrorOv');
       lastPhotoEstimate = null;
     });
 }
 
-D('photoAnalyzeBtn').onclick = analyzePhotoWithContext;
-D('photoContext').onkeydown = function(e) { if (e.key === 'Enter') analyzePhotoWithContext(); };
-D('photoCancel').onclick = function() { HIDE('photoOv'); };
-D('photoOv').onclick = function(e) { if (e.target === D('photoOv')) HIDE('photoOv'); };
+if (D('photoAnalyzeBtn')) D('photoAnalyzeBtn').onclick = analyzePhotoWithContext;
+if (D('photoContext')) D('photoContext').onkeydown = function(e) { if (e.key === 'Enter') analyzePhotoWithContext(); };
+if (D('photoCancel')) D('photoCancel').onclick = function() { HIDE('photoOv'); };
+if (D('photoOv')) D('photoOv').onclick = function(e) { if (e.target === D('photoOv')) HIDE('photoOv'); };
 
-D('photoSearchBtn').onclick = function() {
+if (D('photoSearchBtn')) D('photoSearchBtn').onclick = function() {
   var desc = D('photoDesc').value.trim();
-  if (!desc || desc === '🔄 Analyzing image...') return;
+  if (!desc || desc === '🔄 Analyzing image(s)...') return;
   HIDE('photoOv');
   if (activePhotoTarget === 'lot') {
     D('li').value = desc; D('ladd').onclick();
@@ -1768,7 +1833,7 @@ if (D('lotScanBtn')) D('lotScanBtn').onclick = function() { startScanFor('lot');
 
 if (D('scanNativeCamBtn')) {
   D('scanNativeCamBtn').onclick = function() {
-    activePhotoTarget = activeScanTarget; stopScan(); D('photoInput').click();
+    stopScan(); openPhotoModal(activeScanTarget);
   };
 }
 if (D('scanManualBtn')) {

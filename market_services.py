@@ -61,6 +61,8 @@ def analyze_flip(sold_stats, active_stats, sold_items, active_items, trend,
         "verdict": "🔥 Great Flip" if score >= 70 else "✅ Decent Flip" if score >= 50 else "🚫 Avoid",
         "potential_buy_price": round(potential_buy, 2),
         "potential_sell_price": round(potential_sell, 2),
+        "potential_profit": round(net_profit, 2),
+        "potential_profit_pct": round(margin_pct, 1),
         "net_profit": round(net_profit, 2),
         "fee_calculation": fees
     }

@@ -57,6 +57,8 @@
             <div class="rw">
                 <div class="f1">
                     <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+                    <input type="file" id="photoCamInput" accept="image/*" capture="environment" style="display:none">
+                    <input type="file" id="photoRollInput" accept="image/*" multiple style="display:none">
                     <input type="text" id="q" placeholder='Try "Nintendo Switch OLED" or "iPhone 15 Pro"...' autocomplete="off">
                 </div>
                 <button class="bt bt-p" id="camBtn" title="Identify item from photo" style="padding:10px 14px">📷</button>
@@ -412,11 +414,21 @@
 
 <!-- Photo Upload Modal -->
 <div class="ov" id="photoOv"><div class="ovc"><h3>✨ AI Sourcing Identifier</h3>
-    <img id="photoPreview" src="" alt="Preview" style="width:100%;border-radius:var(--rs);margin-bottom:10px;max-height:240px;object-fit:contain;background:#000;display:none">
+    <div class="sb" style="margin-bottom:12px">Add photos of your item and an optional hint. Gemini AI will identify it for eBay sourcing.</div>
+    <div class="rw mb1" style="gap:8px">
+        <button class="bt bt-p" id="modalCamBtn" style="flex:1;padding:12px;font-size:.95rem">📷 Take Photo</button>
+        <button class="bt bt-p" id="modalRollBtn" style="flex:1;padding:12px;font-size:.95rem">🖼️ Camera Roll / Files</button>
+    </div>
+    <div id="photoThumbnails" style="display:flex;gap:8px;overflow-x:auto;margin-bottom:12px;flex-wrap:wrap;min-height:10px"></div>
     <input type="text" id="photoContext" placeholder="Optional extra hint (e.g. 'model # is DCD791')" class="mb1">
-    <div class="sb" style="margin-bottom:8px">Gemini AI is scanning your photo to find the perfect eBay search title or UPC barcode.</div>
-    <input type="text" id="photoDesc" placeholder="AI result or manual search text" class="mb1" style="font-weight:600">
-    <div class="rw"><button class="bt bt-p" id="photoSearchBtn" style="flex:2;background:var(--a);color:#fff">🔍 Run eBay Search</button><button class="bt bt-p" id="photoAnalyzeBtn" style="flex:1">✨ Re-scan</button><button class="bt bt-g" id="photoCancel" style="flex:1">Cancel</button></div></div></div>
+    <button class="bt bt-p mb1" id="photoAnalyzeBtn" style="width:100%;background:var(--a);color:#fff;font-size:1.05rem;padding:12px">✨ Analyze with Gemini</button>
+    <div id="photoResWrap" style="display:none;border-top:1px solid var(--b);padding-top:12px;margin-top:4px">
+        <div class="sb" style="margin-bottom:6px;color:var(--t2)">Gemini AI Search Result:</div>
+        <input type="text" id="photoDesc" placeholder="AI result or manual search text" class="mb1" style="font-weight:600">
+        <div class="rw"><button class="bt bt-p" id="photoSearchBtn" style="flex:2;background:var(--a);color:#fff">🔍 Run eBay Search</button><button class="bt bt-g" id="photoCancel" style="flex:1">Close</button></div>
+    </div>
+    <div id="photoInitialClose" style="text-align:center"><button class="bt bt-g" style="width:100%" onclick="HIDE('photoOv')">Cancel</button></div>
+</div></div>
 
 <!-- Barcode Scan Overlay -->
 <div class="ov" id="scanOv"><div class="ovc"><h3>🏷️ Universal Barcode & Box Scanner</h3>

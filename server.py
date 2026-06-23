@@ -196,6 +196,7 @@ def _calculate_net_profit(sell_price: float, buy_price: float, shipping_cost: fl
     margin_pct = (net_profit / buy_price * 100) if buy_price > 0 else 0
     return {
         **fees,
+        "shipping_cost": round(shipping_cost, 2),
         "buy_price": round(buy_price, 2),
         "net_profit": round(net_profit, 2),
         "net_margin_pct": round(margin_pct, 1),
@@ -1117,8 +1118,10 @@ def _analyze_flip(sold_stats, active_stats, sold_items, active_items, trend,
         },
         "potential_buy_price": round(potential_buy, 2),
         "potential_sell_price": round(potential_sell, 2),
-        "potential_profit": round(margin_dollar, 2),
-        "potential_profit_pct": round(margin_pct, 1),
+        "potential_profit": fee_calc["net_profit"],
+        "potential_profit_pct": fee_calc["net_margin_pct"],
+        "gross_profit": round(margin_dollar, 2),
+        "gross_profit_pct": round(margin_pct, 1),
         "velocity_per_day": round(velocity, 2), "velocity_label": velocity_label,
         "market_explanation": _build_market_explanation(trend, sm, am, ac, sc, velocity, str_rate,
                                                           buy_price, margin_dollar, category, store_tier, shipping_cost),
@@ -1159,9 +1162,9 @@ def _build_market_explanation(trend, sold_median, active_median, active_count, s
         fc = _calculate_net_profit(sold_median, buy_price, shipping_cost, category, store_tier)
         net = fc["net_profit"]
         if net > 0:
-            parts.append(f"At ${buy_price:.2f}, net ~${net:.2f} after eBay fees (gross ${margin_dollar:.2f}).")
+            parts.append(f"At ${buy_price:.2f}, net ~${net:.2f} after eBay fees & shipping (gross ${margin_dollar:.2f}).")
         else:
-            parts.append(f"At ${buy_price:.2f}, you'd lose ${abs(net):.2f} after eBay fees.")
+            parts.append(f"At ${buy_price:.2f}, you'd lose ${abs(net):.2f} after eBay fees & shipping.")
     return " ".join(parts) if parts else "Not enough data to analyze."
 
 # ── Main Search ──────────────────────────────────────────────────────────
@@ -2073,29 +2076,30 @@ Combine this hint with the visual evidence to produce the single perfect eBay se
 
 @app.route("/api/identify", methods=["POST"])
 def api_identify():
-    if "image" not in request.files:
+    files = request.files.getlist("images") + request.files.getlist("image")
+    files = [f for f in files if f and f.filename]
+    if not files:
         return jsonify({"error": "No image provided"}), 400
-    file = request.files["image"]
-    if not file:
-        return jsonify({"error": "No image provided"}), 400
-    img_bytes = file.read()
     user_context = request.form.get("context", "").strip()
     if not GEMINI_API_KEY:
         return jsonify({"description": "", "error": "❌ Gemini AI API Key not configured! Go to your Render/deployment dashboard → Environment Variables → Add GEMINI_API_KEY (get a free key from aistudio.google.com)."}), 200
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        mime_type = file.mimetype or "image/jpeg"
-        image_part = {"mime_type": mime_type, "data": img_bytes}
+        image_parts = []
+        for f in files:
+            img_bytes = f.read()
+            mime_type = f.mimetype or "image/jpeg"
+            image_parts.append({"mime_type": mime_type, "data": img_bytes})
         prompt = _build_gemini_identify_prompt(user_context)
         
         try:
             model = genai.GenerativeModel("gemini-2.5-flash-lite")
-            response = model.generate_content([image_part, prompt])
+            response = model.generate_content(image_parts + [prompt])
         except Exception as e1:
             print(f"gemini-2.5-flash-lite failed ({e1}), trying gemini-2.5-flash...")
             model = genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content([image_part, prompt])
+            response = model.generate_content(image_parts + [prompt])
             
         description = response.text.strip()
         description = re.sub(r'^["\']|["\']$', '', description).strip()
