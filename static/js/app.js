@@ -14,8 +14,7 @@ try {
   fbApp = firebase.initializeApp(firebaseConfig);
   fbAuth = firebase.auth();
   fbDb = firebase.firestore();
-  console.log("Firebase connected");
-} catch(e) { console.log("Firebase init skipped:", e.message); }
+} catch(e) {}
 
 // ════════════════════════════ HELPERS ════════════════════════════
 var D = function(id) { return document.getElementById(id); };
@@ -1922,14 +1921,10 @@ async function lookupBarcode(code) {
 // Wire up the shipping estimator buttons (must run after DOM is ready)
 _wireShipEstButtons();
 
-console.log('PriceSpy eBay-only ready');
-
 // Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/static/sw.js')
-      .then(function(reg) { console.log('SW registered:', reg.scope); })
-      .catch(function(err) { console.log('SW failed:', err); });
+    navigator.serviceWorker.register('/static/sw.js').catch(function(){});
   });
 }
 
