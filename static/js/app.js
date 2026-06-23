@@ -1682,66 +1682,96 @@ if (D('photoRollInput')) {
   };
 }
 
+function compressImage(file, maxDim, quality) {
+  return new Promise(function(resolve) {
+    if (!file || !file.type.match(/image.*/)) return resolve(file);
+    var reader = new FileReader();
+    reader.onload = function(readerEvent) {
+      var img = new Image();
+      img.onload = function() {
+        var w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+          else { w = Math.round(w * (maxDim / h)); h = maxDim; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob) {
+          resolve(new File([blob], file.name || 'photo.jpg', {type: 'image/jpeg', lastModified: Date.now()}));
+        }, 'image/jpeg', quality || 0.82);
+      };
+      img.onerror = function() { resolve(file); };
+      img.src = readerEvent.target.result;
+    };
+    reader.onerror = function() { resolve(file); };
+    reader.readAsDataURL(file);
+  });
+}
+
 function analyzePhotoWithContext() {
   if (!selectedPhotoFiles.length) {
     alert('Please add at least one photo first!');
     return;
   }
   D('photoAnalyzeBtn').disabled = true;
-  D('photoAnalyzeBtn').textContent = '🔄 Analyzing...';
+  D('photoAnalyzeBtn').textContent = '🔄 Processing...';
   if (D('photoDesc')) {
-    D('photoDesc').value = '🔄 Analyzing image(s)...';
+    D('photoDesc').value = '🔄 Compressing & analyzing...';
     D('photoDesc').disabled = true;
   }
-  var fd = new FormData();
-  for (var i = 0; i < selectedPhotoFiles.length; i++) {
-    fd.append('images', selectedPhotoFiles[i]);
-  }
-  fd.append('context', D('photoContext').value.trim());
-  fetch('/api/identify', {method:'POST', body:fd})
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if (D('photoDesc')) D('photoDesc').disabled = false;
-      D('photoAnalyzeBtn').disabled = false;
-      D('photoAnalyzeBtn').textContent = '✨ Re-scan';
-      if (d.error) {
-        if (D('photoDesc')) D('photoDesc').value = '❌ AI Analysis Failed';
-        D('aiErrorText').textContent = d.error;
+  Promise.all(selectedPhotoFiles.map(function(f) { return compressImage(f, 1200, 0.82); })).then(function(compressedFiles) {
+    var fd = new FormData();
+    for (var i = 0; i < compressedFiles.length; i++) {
+      fd.append('images', compressedFiles[i]);
+    }
+    fd.append('context', D('photoContext').value.trim());
+    fetch('/api/identify', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (D('photoDesc')) D('photoDesc').disabled = false;
+        D('photoAnalyzeBtn').disabled = false;
+        D('photoAnalyzeBtn').textContent = '✨ Re-scan';
+        if (d.error) {
+          if (D('photoDesc')) D('photoDesc').value = '❌ AI Analysis Failed';
+          D('aiErrorText').textContent = d.error;
+          SHOW('aiErrorOv');
+          lastPhotoEstimate = null;
+        } else if (d.description) {
+          if (D('photoResWrap')) D('photoResWrap').style.display = 'block';
+          if (D('photoInitialClose')) D('photoInitialClose').style.display = 'none';
+          if (D('photoDesc')) D('photoDesc').value = d.description;
+          lastPhotoEstimate = null;
+          estimateShipping({
+            itemName: d.description,
+            shipFieldId: 'ship',
+            badgeId: null,
+            quiet: true,
+            onSuccess: function(est) {
+              lastPhotoEstimate = { itemName: d.description, estimate: est };
+            },
+          });
+        } else {
+          if (D('photoResWrap')) D('photoResWrap').style.display = 'block';
+          if (D('photoInitialClose')) D('photoInitialClose').style.display = 'none';
+          if (D('photoDesc')) {
+            D('photoDesc').value = '';
+            D('photoDesc').placeholder = 'Could not detect product. Type item name manually.';
+          }
+          lastPhotoEstimate = null;
+        }
+      })
+      .catch(function(err){
+        if (D('photoDesc')) D('photoDesc').disabled = false;
+        D('photoAnalyzeBtn').disabled = false;
+        D('photoAnalyzeBtn').textContent = '✨ Re-scan';
+        if (D('photoDesc')) D('photoDesc').value = '❌ Network Error';
+        D('aiErrorText').textContent = 'Network error: ' + err.message;
         SHOW('aiErrorOv');
         lastPhotoEstimate = null;
-      } else if (d.description) {
-        if (D('photoResWrap')) D('photoResWrap').style.display = 'block';
-        if (D('photoInitialClose')) D('photoInitialClose').style.display = 'none';
-        if (D('photoDesc')) D('photoDesc').value = d.description;
-        lastPhotoEstimate = null;
-        estimateShipping({
-          itemName: d.description,
-          shipFieldId: 'ship',
-          badgeId: null,
-          quiet: true,
-          onSuccess: function(est) {
-            lastPhotoEstimate = { itemName: d.description, estimate: est };
-          },
-        });
-      } else {
-        if (D('photoResWrap')) D('photoResWrap').style.display = 'block';
-        if (D('photoInitialClose')) D('photoInitialClose').style.display = 'none';
-        if (D('photoDesc')) {
-          D('photoDesc').value = '';
-          D('photoDesc').placeholder = 'Could not detect product. Type item name manually.';
-        }
-        lastPhotoEstimate = null;
-      }
-    })
-    .catch(function(err){
-      if (D('photoDesc')) D('photoDesc').disabled = false;
-      D('photoAnalyzeBtn').disabled = false;
-      D('photoAnalyzeBtn').textContent = '✨ Re-scan';
-      if (D('photoDesc')) D('photoDesc').value = '❌ Network Error';
-      D('aiErrorText').textContent = 'Network error: ' + err.message;
-      SHOW('aiErrorOv');
-      lastPhotoEstimate = null;
-    });
+      });
+  });
 }
 
 if (D('photoAnalyzeBtn')) D('photoAnalyzeBtn').onclick = analyzePhotoWithContext;

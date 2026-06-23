@@ -1,5 +1,5 @@
-// PriceSpy Service Worker
-const CACHE_NAME = 'pricespy-v3';
+// PriceSpy Service Worker v4 (Optimized Caching & Near-instant Load)
+const CACHE_NAME = 'pricespy-v4';
 const STATIC_ASSETS = [
   '/',
   '/static/css/styles.css',
@@ -10,26 +10,20 @@ const STATIC_ASSETS = [
   '/static/manifest.json?v=2'
 ];
 
-// Install event - cache static assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(STATIC_ASSETS);
-      })
+      .then((cache) => cache.addAll(STATIC_ASSETS))
       .then(() => self.skipWaiting())
   );
 });
 
-// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -38,29 +32,35 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
-  
-  // Skip API calls and dynamic routes
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return;
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Clone the response before caching
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME)
-          .then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        return response;
+  // Stale-while-revalidate for static assets & images
+  if (url.pathname.startsWith('/static/') || STATIC_ASSETS.includes(url.pathname)) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        const fetchPromise = fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          }
+          return networkResponse;
+        }).catch(() => {});
+        return cachedResponse || fetchPromise;
       })
-      .catch(() => {
-        // Network failed, try cache
-        return caches.match(event.request);
-      })
-  );
+    );
+  } else {
+    // Network first for HTML navigation
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+  }
 });

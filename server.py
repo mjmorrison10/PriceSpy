@@ -85,6 +85,9 @@ EBAY_VERIFICATION_TOKEN = os.environ.get("EBAY_VERIFICATION_TOKEN", "pricespy-eb
 
 PRICE_CACHE: dict[str, dict] = {}
 SESSION = requests.Session()
+_adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+SESSION.mount("http://", _adapter)
+SESSION.mount("https://", _adapter)
 SESSION.headers.update({
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -1208,8 +1211,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         except Exception:
             pass
 
-    # 3. Real eBay active listings
-    active_items_raw = _ebay_active_listings(q, filter_condition, limit=50)
+    # 3. Real eBay active listings (already fetched in parallel)
     active_items = _filter_by_relevance(active_items_raw, q)
 
     # Filter
