@@ -28,6 +28,13 @@ def init_db():
             alert_threshold REAL DEFAULT -15.0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS saved_searches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT,
+            query TEXT, condition TEXT, buy_price REAL,
+            market_median REAL, net_profit REAL, flip_score INTEGER,
+            listings_json TEXT, notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS deal_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT,
             item_name TEXT, detected_condition TEXT,

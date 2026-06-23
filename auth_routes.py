@@ -144,6 +144,34 @@ def register_routes(app, do_search_fn, calculate_net_profit_fn=None):
                 continue
         return jsonify({"updated": len(updated), "items": updated})
 
+    # ═══ SAVED SEARCHES & COMPS ═══
+    @app.route("/api/saved-searches")
+    @require_auth
+    def saved_searches_list(): return jsonify(_get_provider().get_saved_searches(g.user_id))
+
+    @app.route("/api/saved-searches", methods=["POST"])
+    @require_auth
+    def saved_searches_add():
+        d = request.get_json(force=True, silent=True) or {}
+        q = (d.get("query") or "").strip()
+        if not q: return jsonify({"error": "Query required"}), 400
+        data = {
+            "query": q, "condition": d.get("condition", "all"),
+            "buy_price": float(d.get("buy_price", 0) or 0),
+            "market_median": float(d.get("market_median", 0) or 0),
+            "net_profit": float(d.get("net_profit", 0) or 0),
+            "flip_score": int(d.get("flip_score", 0) or 0),
+            "listings_json": d.get("listings_json", "[]"),
+        }
+        rid = _get_provider().add_saved_search(g.user_id, data)
+        return jsonify({"message": "Saved", "id": rid})
+
+    @app.route("/api/saved-searches/<search_id>", methods=["DELETE"])
+    @require_auth
+    def saved_searches_del(search_id):
+        _get_provider().delete_saved_search(search_id, g.user_id)
+        return jsonify({"status": "deleted"})
+
     # ═══ DEAL HISTORY ═══
     @app.route("/api/deal-history")
     @require_auth

@@ -173,7 +173,7 @@ function showPage(p) {
   for (var i = 0; i < navBtns.length; i++) {
     navBtns[i].classList.toggle('ac', navBtns[i].dataset.pg === p);
   }
-  if (p === 'watch') loadWl();
+  if (p === 'watch') { loadWl(); loadSavedSearches(); }
   if (p === 'inventory') loadInv();
   if (p === 'deals') loadDh();
   if (p === 'trending') loadTr();
@@ -666,6 +666,16 @@ D('catSearch').onfocus = function() { if (D('catSearch').value.trim()) fetchCate
 function renderAll(d) {
   var res = D('res');
   res.innerHTML = '';
+  
+  var actionRow = EL('div', 'rw mb1', res);
+  actionRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;background:var(--s);padding:12px 16px;border-radius:var(--rad);border:1px solid var(--b)';
+  var infoLeft = EL('div', '', actionRow);
+  EL('h3', '', infoLeft).textContent = '🔍 ' + (d.query || D('q').value || 'Search Results');
+  var saveBtn = EL('button', 'bt bt-p', actionRow);
+  saveBtn.style.cssText = 'padding:10px 18px;font-size:0.88rem';
+  saveBtn.textContent = '⭐ Save Search & Comps';
+  saveBtn.onclick = function() { saveSearchAndComps(d); };
+
   var sumGrid = EL('div', 'gd', res);
   buildSummary(sumGrid, d);
   buildTimePills(res);
@@ -1061,6 +1071,111 @@ function showToast(msg, type) {
     el.style.transition = 'opacity 0.3s';
     setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
   }, 3000);
+}
+
+async function saveSearchAndComps(d) {
+  if (!token) {
+    showToast('Login required to bookmark searches', 'info');
+    SHOW('authOv');
+    return;
+  }
+  var payload = {
+    query: d.query || D('q').value.trim(),
+    condition: D('cond').value || 'all',
+    buy_price: parseFloat(D('bp').value) || 0,
+    market_median: (d.sold_summary && d.sold_summary.median) || 0,
+    net_profit: (d.flip_analysis && d.flip_analysis.potential_profit) || 0,
+    flip_score: (d.flip_analysis && d.flip_analysis.score) || 0,
+    listings_json: JSON.stringify((d.recent_sold || []).slice(0, 10))
+  };
+  try {
+    var r = await fetch('/api/saved-searches?token=' + getToken(), {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (r.ok) {
+      showToast('Search & listing comps saved to your account!', 'success');
+      loadSavedSearches();
+    } else {
+      showToast('Could not save search', 'error');
+    }
+  } catch(e) { showToast('Network error', 'error'); }
+}
+
+async function loadSavedSearches() {
+  var container = D('savedSearchList');
+  if (!container) return;
+  if (!token) {
+    container.innerHTML = '<div class="empty-state"><h3>👤 Login Required</h3><p>Log in to bookmark specific item searches and listing comps.</p><button class="bt bt-p" onclick="SHOW(\'authOv\')">Log In / Sign Up</button></div>';
+    return;
+  }
+  try {
+    var items = await fetch('/api/saved-searches?token=' + getToken()).then(function(r) { return r.json(); });
+    if (!items || !items.length) {
+      container.innerHTML = '<div class="empty-state"><h3>⭐ No Bookmarked Searches Yet</h3><p>Search for any item and click \'⭐ Save Search & Comps\' to bookmark results here.</p><button class="bt bt-p" onclick="showPage(\'search\')">🔍 Run a Search</button></div>';
+      return;
+    }
+    container.innerHTML = '';
+    for (var i = 0; i < items.length; i++) {
+      (function(it) {
+        var card = document.createElement('div');
+        card.className = 'cd mb1';
+        card.style.cssText = 'padding:16px;border:1px solid var(--b);border-radius:var(--rad);background:var(--s);text-align:left';
+        
+        var top = document.createElement('div');
+        top.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px';
+        var titleWrap = document.createElement('div');
+        titleWrap.innerHTML = '<h3 style="font-size:1.05rem;color:var(--t);margin:0">' + esc(it.query) + '</h3><small style="color:var(--t2);font-size:0.75rem">Saved ' + (it.created_at ? esc(it.created_at).slice(0, 16) : 'recently') + ' · Cond: ' + CL(it.condition) + '</small>';
+        top.appendChild(titleWrap);
+
+        var del = document.createElement('button');
+        del.className = 'bt bt-g';
+        del.style.cssText = 'padding:4px 10px;font-size:0.75rem';
+        del.textContent = '✕';
+        del.onclick = async function() {
+          await fetch('/api/saved-searches/' + it.id + '?token=' + getToken(), {method:'DELETE'});
+          showToast('Saved search deleted', 'info');
+          loadSavedSearches();
+        };
+        top.appendChild(del);
+        card.appendChild(top);
+
+        var stats = document.createElement('div');
+        stats.style.cssText = 'display:flex;gap:12px;margin:10px 0;background:var(--s2);padding:10px;border-radius:var(--rs);font-size:0.85rem;flex-wrap:wrap';
+        stats.innerHTML = '<div><span style="color:var(--t2);font-size:0.75rem;display:block">Market Median</span><strong>$' + FMT(it.market_median) + '</strong></div>' +
+                          '<div><span style="color:var(--t2);font-size:0.75rem;display:block">Net Profit</span><strong style="color:' + (it.net_profit >= 0 ? 'var(--g)' : 'var(--r)') + '">' + (it.net_profit >= 0 ? '+' : '') + '$' + FMT(it.net_profit) + '</strong></div>' +
+                          '<div><span style="color:var(--t2);font-size:0.75rem;display:block">Flip Score</span><strong>' + it.flip_score + '/100</strong></div>';
+        card.appendChild(stats);
+
+        var rerun = document.createElement('button');
+        rerun.className = 'bt bt-p mt1';
+        rerun.style.cssText = 'width:100%;padding:10px;font-size:0.88rem';
+        rerun.textContent = '🔄 Re-run Live Market Search';
+        rerun.onclick = function() {
+          D('q').value = it.query;
+          if (it.buy_price) D('bp').value = it.buy_price;
+          if (it.condition) D('cond').value = it.condition;
+          showPage('search'); search();
+        };
+        card.appendChild(rerun);
+
+        try {
+          var comps = JSON.parse(it.listings_json || '[]');
+          if (comps && comps.length) {
+            var compDetails = document.createElement('details');
+            compDetails.style.cssText = 'margin-top:10px;border-top:1px solid var(--b);padding-top:8px;font-size:0.8rem';
+            compDetails.innerHTML = '<summary style="cursor:pointer;color:var(--a);font-weight:600">📋 View Saved Comps Snapshot (' + comps.length + ' sold listings)</summary>' +
+                                    '<div style="margin-top:8px;max-height:200px;overflow-y:auto">' +
+                                    comps.map(function(c) { return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--b)"><span>' + esc(c.title || '') + '</span><strong>$' + FMT(c.price || 0) + '</strong></div>'; }).join('') +
+                                    '</div>';
+            card.appendChild(compDetails);
+          }
+        } catch(e) {}
+
+        container.appendChild(card);
+      })(items[i]);
+    }
+  } catch(e) { container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--r)">Could not load saved searches.</div>'; }
 }
 
 // Watchlist

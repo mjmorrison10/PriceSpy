@@ -47,6 +47,12 @@ class StorageProvider:
     def update_watchlist_prices(self, item_id: str, median: float, low: float,
                                  high: float, score: int, change_pct: float) -> None: ...
 
+    def get_saved_searches(self, user_id: str) -> list[dict]: ...
+
+    def add_saved_search(self, user_id: str, data: dict) -> int: ...
+
+    def delete_saved_search(self, search_id: str, user_id: str) -> None: ...
+
     def get_deal_history(self, user_id: str) -> list[dict]: ...
 
     def add_deal_history(self, user_id: str, data: dict) -> None: ...
@@ -163,6 +169,27 @@ class SQLiteProvider(StorageProvider):
         conn.execute(
             "UPDATE watchlist SET last_median=?, last_low=?, last_high=?, last_score=?, last_checked=datetime('now'), price_change_pct=? WHERE id=?",
             (median, low, high, score, change_pct, item_id))
+        conn.commit()
+        conn.close()
+
+    def get_saved_searches(self, user_id):
+        conn = self._connect()
+        rows = conn.execute("SELECT * FROM saved_searches WHERE user_id=? ORDER BY created_at DESC", (user_id,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+    def add_saved_search(self, user_id, data):
+        conn = self._connect()
+        conn.execute("INSERT INTO saved_searches (user_id,query,condition,buy_price,market_median,net_profit,flip_score,listings_json) VALUES (?,?,?,?,?,?,?,?)",
+                     (user_id, data["query"], data.get("condition","all"), data.get("buy_price",0), data.get("market_median",0), data.get("net_profit",0), data.get("flip_score",0), data.get("listings_json","[]")))
+        conn.commit()
+        rid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return rid
+
+    def delete_saved_search(self, search_id, user_id):
+        conn = self._connect()
+        conn.execute("DELETE FROM saved_searches WHERE id=? AND user_id=?", (search_id, user_id))
         conn.commit()
         conn.close()
 
@@ -435,6 +462,30 @@ class FirebaseProvider(StorageProvider):
             "price_change_pct": change_pct,
             "last_checked": firestore.SERVER_TIMESTAMP,
         })
+
+    def get_saved_searches(self, user_id):
+        docs = self.db.collection("saved_searches").where("user_id", "==", user_id).order_by("created_at", direction=firestore.Query.DESCENDING).stream()
+        return [{**d.to_dict(), "id": d.id} for d in docs]
+
+    def add_saved_search(self, user_id, data):
+        ref = self.db.collection("saved_searches").document()
+        ref.set({
+            "user_id": user_id,
+            "query": data["query"],
+            "condition": data.get("condition","all"),
+            "buy_price": data.get("buy_price",0),
+            "market_median": data.get("market_median",0),
+            "net_profit": data.get("net_profit",0),
+            "flip_score": data.get("flip_score",0),
+            "listings_json": data.get("listings_json","[]"),
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return ref.id
+
+    def delete_saved_search(self, search_id, user_id):
+        doc = self.db.collection("saved_searches").document(search_id).get()
+        if doc.exists and doc.to_dict().get("user_id") == user_id:
+            doc.reference.delete()
 
     def get_deal_history(self, user_id):
         docs = self.db.collection("deal_history").where("user_id", "==", user_id).order_by(
