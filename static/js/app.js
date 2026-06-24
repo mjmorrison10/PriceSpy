@@ -748,12 +748,26 @@ function buildDataSource(res, d) {
     var verifyLink = EL('a', '', dr);
     verifyLink.href = d.ebay_url; verifyLink.target = '_blank'; verifyLink.rel = 'noopener noreferrer';
     verifyLink.style.cssText = 'margin-left:12px;font-size:.7rem;color:var(--a);text-decoration:none;font-weight:600';
-    verifyLink.textContent = 'Verify on eBay →';
+    verifyLink.textContent = 'Verify on eBay Sold Search →';
   }
   if (d.market_note) {
     var noteDiv = EL('div', '', dr);
     noteDiv.style.cssText = 'font-size:.65rem;color:var(--am);margin-top:6px;padding:4px 8px;background:rgba(251,191,36,.1);border-radius:6px';
     noteDiv.textContent = d.market_note;
+  }
+  if (d.sold_validation_summary) {
+    var sv = d.sold_validation_summary;
+    var reasonText = '';
+    if (sv.excluded_reasons) {
+      var parts = [];
+      for (var rk in sv.excluded_reasons) {
+        parts.push(rk.replace(/_/g, ' ') + ': ' + sv.excluded_reasons[rk]);
+      }
+      reasonText = parts.slice(0, 3).join(' · ');
+    }
+    var valDiv = EL('div', '', dr);
+    valDiv.style.cssText = 'font-size:.65rem;color:var(--t2);margin-top:6px;padding:4px 8px;background:rgba(91,141,239,.08);border-radius:6px';
+    valDiv.textContent = 'Validated sold comps: ' + (sv.valid_count || 0) + ' | Excluded: ' + (sv.excluded_count || 0) + (reasonText ? ' · ' + reasonText : '');
   }
   if (d.api_missing) {
     var setupDiv = EL('div', '', dr);
@@ -764,10 +778,18 @@ function buildDataSource(res, d) {
 
 function buildChart(res, d) {
   if (chart) { chart.destroy(); chart = null; }
-  if (!d.trend || d.trend.length < 2) return;
+  if (!d.trend || d.trend.length < 2) {
+    if (d.trend_status && d.trend_status.available === false) {
+      var nd = EL('div', 'cd', res);
+      EL('h3', '', nd).textContent = '📈 Price Trend';
+      var msg = EL('div', 'sb', nd);
+      msg.textContent = 'Not enough validated sold-date data to show a price trend.';
+    }
+    return;
+  }
   var fc = d.active_filter_condition || '';
   var cd = EL('div', 'cd', res);
-  EL('h3', '', cd).textContent = '📈 Price Trend' + (fc && fc !== 'all' ? ' \u2014 ' + CL(fc) : '');
+  EL('h3', '', cd).textContent = '📈 Price Trend' + (fc && fc !== 'all' ? ' — ' + CL(fc) : '');
   var cw = EL('div', 'cw', cd);
   var canvas = document.createElement('canvas');
   cw.appendChild(canvas);
@@ -904,12 +926,13 @@ function buildListings(res, d) {
   TXT(sH, '🟢 Recently Sold');
   if (d.recent_sold && d.recent_sold.length) {
     var sCount = EL('div', 'lcount', res);
-    TXT(sCount, d.recent_sold.length + ' sold comps used in the average. Scroll to review all; click ❌ to remove bad comps.');
+    var excludedCount = d.sold_validation_summary ? (d.sold_validation_summary.excluded_count || 0) : 0;
+    TXT(sCount, d.recent_sold.length + ' validated sold comps used in the average.' + (excludedCount ? ' ' + excludedCount + ' sold candidates were excluded from pricing.' : '') + ' Click a row to verify on eBay sold search; click ❌ to remove a comp manually.');
     var sBox = EL('div', 'lscroll', res);
     for (var i = 0; i < d.recent_sold.length; i++) {
       var it = d.recent_sold[i];
       var row = EL('div', 'lr', sBox);
-      row.onclick = (function(u) { return function() { window.open(u, '_blank'); }; })(it.url || '#');
+      row.onclick = (function(u) { return function() { window.open(u, '_blank'); }; })(it.verification_url || d.ebay_url || it.url || '#');
       var del = EL('button', 'xdel', row);
       del.type = 'button'; del.title = 'Remove this sold comp'; del.textContent = '❌';
       del.onclick = (function(ix) { return function(ev) { removeListing('sold', ix, ev); }; })(i);
@@ -918,11 +941,29 @@ function buildListings(res, d) {
       if (it.condition) { var ic = EL('span', 'ic', row); TXT(ic, CL(it.condition)); }
       var id = EL('span', 'id', row); TXT(id, it.sold_date || '');
       var ip = EL('span', 'ip', row); TXT(ip, '$' + FMT(it.price));
+      var src = EL('span', 'id', row);
+      src.style.marginLeft = '6px';
+      TXT(src, it.source === 'eBay HTML' ? 'HTML' : (it.source === 'eBay Finding API' ? 'Finding' : (it.source === 'eBay Browse API' ? 'Browse' : (it.source || ''))));
+      if (it.url) {
+        var raw = EL('a', '', row);
+        raw.href = it.url;
+        raw.target = '_blank';
+        raw.rel = 'noopener noreferrer';
+        raw.textContent = 'Listing';
+        raw.style.cssText = 'font-size:.68rem;color:var(--a);margin-left:8px;text-decoration:none';
+        raw.onclick = function(ev) { ev.stopPropagation(); };
+        raw.title = 'Open original eBay listing page (buyer-facing page, not proof of sold status)';
+      }
     }
   } else {
     var emp = EL('div', '', res);
     emp.style.cssText = 'text-align:center;padding:30px;color:var(--t2);font-size:.82rem';
-    TXT(emp, 'No eBay sold listings found.');
+    TXT(emp, 'No validated eBay sold comps available.');
+    if (d.sold_validation_summary && d.sold_validation_summary.excluded_count) {
+      var sub = EL('div', '', res);
+      sub.style.cssText = 'text-align:center;padding:0 20px 24px;color:var(--am);font-size:.76rem';
+      TXT(sub, d.sold_validation_summary.excluded_count + ' sold candidates were excluded from pricing because they had missing/future sold dates or also appeared active.');
+    }
   }
   var aH = EL('h3', '', res);
   aH.style.cssText = 'font-size:.95rem;margin-bottom:10px;margin-top:20px';

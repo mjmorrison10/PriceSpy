@@ -403,6 +403,103 @@ def _ebay_condition_to_canonical(raw: str) -> str:
             return canonical
     return "used"
 
+
+def _extract_item_id_from_url(url: str) -> str | None:
+    if not url:
+        return None
+    m = re.search(r'/itm/(?:[^/]+/)?(\d+)', url)
+    if m:
+        return m.group(1)
+    m = re.search(r'item=(\d+)', url)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _safe_ymd(raw: str) -> str | None:
+    raw = (raw or '').strip()
+    if not raw:
+        return None
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', raw):
+        return raw
+    if len(raw) >= 10 and re.match(r'^\d{4}-\d{2}-\d{2}', raw[:10]):
+        return raw[:10]
+    return None
+
+
+def _build_sold_verification_url(query: str, title: str = '', item_id: str | None = None) -> str:
+    search_term = item_id or title or query or ''
+    return (
+        'https://www.ebay.com/sch/i.html?_nkw=' + urllib.parse.quote_plus(search_term) +
+        '&LH_Sold=1&LH_Complete=1'
+    )
+
+
+def _sold_source_merge_priority(item: dict) -> tuple:
+    source = item.get('source', '')
+    source_rank = {
+        'eBay HTML': 3,
+        'eBay Finding API': 2,
+        'eBay Browse API': 1,
+        'PriceCharting': 0,
+    }.get(source, 0)
+    has_date = 1 if _safe_ymd(item.get('sold_date', '')) else 0
+    return (has_date, source_rank)
+
+
+def _summarize_excluded_reasons(items: list[dict]) -> dict:
+    counts = defaultdict(int)
+    for it in items or []:
+        for reason in it.get('reject_reasons', []) or []:
+            counts[reason] += 1
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], today_ymd: str) -> dict:
+    comp = dict(item or {})
+    sold_date = _safe_ymd(comp.get('sold_date', ''))
+    item_id = comp.get('item_id') or _extract_item_id_from_url(comp.get('url', ''))
+    source = comp.get('source', '')
+    source_conf = 'low'
+    if source == 'eBay HTML':
+        source_conf = 'high'
+    elif source == 'eBay Finding API':
+        source_conf = 'medium'
+    elif source == 'PriceCharting':
+        source_conf = 'low'
+
+    reject_reasons = []
+    warning_reasons = []
+    active_overlap = bool(item_id and item_id in active_ids)
+
+    if not sold_date:
+        reject_reasons.append('missing_sold_date')
+    elif sold_date > today_ymd:
+        reject_reasons.append('future_sold_date')
+
+    if active_overlap:
+        reject_reasons.append('active_overlap')
+
+    if source == 'eBay Browse API':
+        warning_reasons.append('browse_view_item_url')
+    elif source == 'eBay Finding API':
+        warning_reasons.append('finding_view_item_url')
+    elif source == 'PriceCharting':
+        warning_reasons.append('non_ebay_source')
+
+    comp['item_id'] = item_id
+    comp['sold_date'] = sold_date or ''
+    comp['sold_date_raw'] = comp.get('sold_date_raw') or item.get('sold_date') or ''
+    comp['sold_date_valid'] = bool(sold_date and sold_date <= today_ymd)
+    comp['active_overlap'] = active_overlap
+    comp['source_confidence'] = source_conf
+    comp['verification_url'] = _build_sold_verification_url(query, comp.get('title', ''), item_id)
+    comp['url_type'] = 'view_item' if comp.get('url') else 'none'
+    comp['reject_reasons'] = reject_reasons
+    comp['warning_reasons'] = warning_reasons
+    comp['comp_valid'] = len(reject_reasons) == 0
+    return comp
+
 # ── eBay Sold Data (Finding API) ───────────────────────────────────────
 def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
     """Real sold/completed listings. Tries Browse API and Finding API in parallel."""
@@ -495,13 +592,15 @@ def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) ->
         r1 = f1.result()
         r2 = f2.result()
         
-    # Merge and deduplicate by URL
-    seen_urls = set()
+    # Merge and deduplicate by URL, preferring items with real end dates and stronger sold sources.
+    best_by_key = {}
     for item in r1 + r2:
-        if item["url"] not in seen_urls:
-            results.append(item)
-            seen_urls.add(item["url"])
-            
+        key = item.get("url") or f"{item.get('title', '')}|{item.get('price', '')}"
+        existing = best_by_key.get(key)
+        if existing is None or _sold_source_merge_priority(item) > _sold_source_merge_priority(existing):
+            best_by_key[key] = item
+    results = list(best_by_key.values())
+
     if not results:
         # Last resort: HTML scraping
         return _scrape_ebay_sold_fallback(query, condition, limit)
@@ -1178,6 +1277,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
                shipping_cost: float = 0.0, promoted_rate: float = 0.0,
                ebay_category_id: str = "") -> dict:
     now = datetime.now(timezone.utc)
+    today_ymd = now.strftime("%Y-%m-%d")
     category = _detect_ebay_category(q, ebay_category_id)
 
     # Use ThreadPoolExecutor for parallel API calls
@@ -1189,30 +1289,43 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         sold_items_raw = future_sold.result()
         active_items_raw = future_active.result()
 
-    sold_items = _filter_by_relevance(sold_items_raw, q)
+    sold_candidates = _filter_by_relevance(sold_items_raw, q)
     source_label = "eBay"
     if sold_items_raw and sold_items_raw[0].get("source"):
         source_label = sold_items_raw[0]["source"].replace("eBay ", "")
-    data_source = f"eBay Sold Listings ({len(sold_items)} relevant of {len(sold_items_raw)} items via {source_label})"
-    confidence = "high" if len(sold_items) >= 5 else "medium" if len(sold_items) > 0 else "low"
-    market_note = "Real sold prices from eBay, filtered for title relevance" if sold_items else "No relevant recent eBay sold listings found."
 
     # 2. PriceCharting fallback for games
-    if not sold_items and ENABLE_PRICECHARTING and _is_gaming_query(q):
+    if not sold_candidates and ENABLE_PRICECHARTING and _is_gaming_query(q):
         try:
             products = _search_pricecharting(q)
             if products and products[0].get("relevance", 0) >= 0.3:
                 pc_data = _scrape_pricecharting_detail(products[0]["url"])
                 if pc_data and pc_data.get("sold_listings"):
-                    sold_items = _filter_by_relevance(pc_data["sold_listings"], q)
-                    data_source = f"PriceCharting — {products[0]['title']} ({len(sold_items)} relevant listings)"
-                    confidence = "medium"
-                    market_note = "PriceCharting game data, filtered for title relevance (verify on eBay)."
+                    sold_candidates = _filter_by_relevance(pc_data["sold_listings"], q)
+                    source_label = "PriceCharting"
         except Exception:
             pass
 
     # 3. Real eBay active listings (already fetched in parallel)
     active_items = _filter_by_relevance(active_items_raw, q)
+    active_ids = {_extract_item_id_from_url(it.get("url", "")) for it in active_items if _extract_item_id_from_url(it.get("url", ""))}
+
+    sold_candidates = [_validate_sold_item_basic(it, q, active_ids, today_ymd) for it in sold_candidates]
+    sold_items = [it for it in sold_candidates if it.get("comp_valid")]
+    excluded_sold = [it for it in sold_candidates if not it.get("comp_valid")]
+
+    data_source = (
+        f"PriceCharting ({len(sold_items)} validated of {len(sold_candidates)} relevant listings)"
+        if source_label == "PriceCharting"
+        else f"eBay Sold Listings ({len(sold_items)} validated of {len(sold_candidates)} relevant items via {source_label})"
+    )
+    confidence = "high" if len(sold_items) >= 5 else "medium" if len(sold_items) > 0 else "low"
+    if sold_items:
+        market_note = f"Validated sold comps from eBay sources. {len(excluded_sold)} candidate comps excluded for missing/future dates or active overlap." if excluded_sold else "Validated sold comps from eBay sources."
+    elif sold_candidates:
+        market_note = f"Sold candidates were found, but all {len(sold_candidates)} were excluded from pricing due to missing/future dates or active overlap."
+    else:
+        market_note = "No relevant recent eBay sold listings found."
 
     # Filter
     sold_filtered = _filter_by_condition(sold_items, filter_condition)
@@ -1226,6 +1339,10 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
 
     median_price = sold_stats.get("median") or active_stats.get("median") or 0
     trend = _generate_trend(median_price, sold_filtered, period_days)
+    trend_status = {
+        "available": len(trend) >= 2,
+        "reason": "" if len(trend) >= 2 else "not_enough_valid_dated_sales",
+    }
 
     if len(trend) >= 2:
         first, last = trend[0]["median"], trend[-1]["median"]
@@ -1272,8 +1389,10 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         "condition_sold": condition_sold,
         "condition_active": condition_active,
         "trend": trend,
+        "trend_status": trend_status,
         "direction": direction,
         "recent_sold": recent_sold,
+        "excluded_sold": excluded_sold,
         "active_listings": active_filtered,
         "data_source": data_source,
         "confidence": confidence,
@@ -1291,6 +1410,13 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         "total_active_scraped": len(active_filtered),
         "total_sold_before_relevance_filter": len(sold_items_raw),
         "total_active_before_relevance_filter": len(active_items_raw),
+        "total_sold_before_validation": len(sold_candidates),
+        "total_sold_excluded": len(excluded_sold),
+        "sold_validation_summary": {
+            "valid_count": len(sold_items),
+            "excluded_count": len(excluded_sold),
+            "excluded_reasons": _summarize_excluded_reasons(excluded_sold),
+        },
         "buy_price": buy_price if buy_price > 0 else 0,
         "store_tier": store_tier,
         "shipping_cost": shipping_cost if shipping_cost > 0 else 0,
@@ -1409,9 +1535,18 @@ def api_recalculate():
                 "price": price,
                 "shipping": _as_float(it.get("shipping"), 0),
                 "sold_date": it.get("sold_date"),
+                "sold_date_raw": it.get("sold_date_raw"),
                 "condition": it.get("condition") if it.get("condition") in EBAY_COND else "used",
                 "url": str(it.get("url") or ""),
+                "verification_url": str(it.get("verification_url") or ""),
+                "url_type": str(it.get("url_type") or ""),
+                "item_id": str(it.get("item_id") or ""),
                 "source": it.get("source"),
+                "source_confidence": it.get("source_confidence"),
+                "active_overlap": bool(it.get("active_overlap")),
+                "comp_valid": bool(it.get("comp_valid", True)),
+                "reject_reasons": list(it.get("reject_reasons") or []),
+                "warning_reasons": list(it.get("warning_reasons") or []),
                 "is_auction": bool(it.get("is_auction")),
                 "relevance": it.get("relevance"),
             })
@@ -1491,6 +1626,7 @@ def api_recalculate():
         "condition_sold": condition_sold,
         "condition_active": condition_active,
         "trend": trend,
+        "trend_status": {"available": len(trend) >= 2, "reason": "" if len(trend) >= 2 else "not_enough_valid_dated_sales"},
         "direction": direction,
         "recent_sold": sorted(sold_filtered, key=lambda x: x.get("sold_date") or "", reverse=True),
         "active_listings": active_filtered,
@@ -1499,6 +1635,11 @@ def api_recalculate():
         "promoted_impact": promoted_impact,
         "total_sold_scraped": len(sold_filtered),
         "total_active_scraped": len(active_filtered),
+        "sold_validation_summary": {
+            "valid_count": len(d.get("recent_sold") or sold_filtered),
+            "excluded_count": len(d.get("excluded_sold") or []),
+            "excluded_reasons": _summarize_excluded_reasons(d.get("excluded_sold") or []),
+        },
         "market_note": "Manual comp edits applied. Medians and analysis updated from your curated listings.",
         "buy_price": buy_price if buy_price > 0 else 0,
         "store_tier": store_tier,
