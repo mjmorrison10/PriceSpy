@@ -760,7 +760,7 @@ function buildDataSource(res, d) {
       for (var sk in sv.source_breakdown) { srcParts.push(sk.replace('eBay ', '') + ': ' + sv.source_breakdown[sk]); }
       srcText = srcParts.slice(0, 3).join(' · ');
     }
-    valDiv.textContent = 'Validated sold comps: ' + (sv.valid_count || 0) + ' | Excluded: ' + (sv.excluded_count || 0) + (srcText ? ' · Sources: ' + srcText : '') + (reasonText ? ' · ' + reasonText : '');
+    valDiv.textContent = 'Validated sold listings: ' + (sv.valid_count || 0) + ' | Excluded: ' + (sv.excluded_count || 0) + (srcText ? ' · Sources: ' + srcText : '') + (reasonText ? ' · ' + reasonText : '');
   }
   if (d.api_missing) {
     var setupDiv = EL('div', '', dr);
@@ -890,7 +890,7 @@ function buildPromotedImpact(res, d) {
 function buildListings(res, d) {
   var sH = EL('h3', '', res);
   sH.style.cssText = 'font-size:.95rem;margin-bottom:10px';
-  TXT(sH, '🟢 Recently Sold');
+  TXT(sH, '🟢 Verified Sold Listings');
   if (d.recent_sold && d.recent_sold.length) {
     var sCount = EL('div', 'lcount', res);
     var excludedCount = d.sold_validation_summary ? (d.sold_validation_summary.excluded_count || 0) : 0;
@@ -910,7 +910,7 @@ function buildListings(res, d) {
       var ip = EL('span', 'ip', row); TXT(ip, '$' + FMT(it.price));
       var src = EL('span', 'id', row);
       src.style.marginLeft = '6px';
-      TXT(src, it.source === 'eBay HTML' ? 'HTML' : (it.source === 'eBay Finding API' ? 'Finding' : (it.source === 'eBay Browse API' ? 'Browse' : (it.source || ''))));
+      TXT(src, it.source === 'eBay Sold Search' ? 'Sold Search' : (it.source === 'eBay Finding API' ? 'Finding' : (it.source === 'eBay Browse API' ? 'Browse' : (it.source || ''))));
       if (it.url) {
         var raw = EL('a', '', row);
         raw.href = it.url;

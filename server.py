@@ -438,7 +438,7 @@ def _build_sold_verification_url(query: str, title: str = '', item_id: str | Non
 def _sold_source_merge_priority(item: dict) -> tuple:
     source = item.get('source', '')
     source_rank = {
-        'eBay HTML': 4,
+        'eBay Sold Search': 4,
         'eBay Finding API': 3,
         'eBay Browse API': 2,
         'PriceCharting': 1,
@@ -490,7 +490,7 @@ def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], toda
     item_id = comp.get('item_id') or _extract_item_id_from_url(comp.get('url', ''))
     source = comp.get('source', '')
     source_conf = 'low'
-    if source == 'eBay HTML':
+    if source == 'eBay Sold Search':
         source_conf = 'high'
     elif source == 'eBay Finding API':
         source_conf = 'medium'
@@ -511,7 +511,7 @@ def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], toda
 
     reject_reasons.extend(_category_specific_mismatch_reasons(query, comp.get('title', '')))
 
-    if source == 'eBay HTML':
+    if source == 'eBay Sold Search':
         source_conf = 'high'
     elif source == 'eBay Finding API':
         source_conf = 'medium'
@@ -638,66 +638,78 @@ def _fetch_ebay_sold_finding(query: str, condition: str = "all", limit: int = 10
 
 
 def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
-    """Return sold/completed listing candidates from all available sources, prioritizing true sold evidence."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        f_browse = executor.submit(_fetch_ebay_sold_browse, query, condition, limit)
-        f_finding = executor.submit(_fetch_ebay_sold_finding, query, condition, limit)
-        f_html = executor.submit(_scrape_ebay_sold_fallback, query, condition, min(limit, 60))
+    """Return only verified eBay sold-search results for user-facing sold comps.
 
-        browse_items = f_browse.result() or []
-        finding_items = f_finding.result() or []
-        html_items = f_html.result() or []
+    We intentionally do NOT use Browse soldItemOnly or Finding completed results as
+    user-facing sold truth because those sources can still point at buyer-facing
+    View Item pages, multi-quantity/multi-variation listings, or records with weak
+    end-date semantics. For correctness, the app now treats the eBay sold/completed
+    search surface as the verified sold-listing source.
+    """
+    return _scrape_ebay_sold_fallback(query, condition, min(limit, 60))
 
-    merged = _merge_sold_candidates(html_items + finding_items + browse_items)
-    return merged
 
 def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 60) -> list[dict]:
-    """Fallback HTML scraper for eBay sold listings when API is empty or fails."""
+    """Scrape the eBay sold/completed search page as the verified sold-listing source."""
     u = f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(query)}&LH_Sold=1&LH_Complete=1&_ipg=60"
     if condition and condition != "all" and condition in EBAY_COND:
         u += f"&LH_ItemCondition={EBAY_COND[condition]['id']}"
     try:
         r = SESSION.get(u, timeout=15)
         if r.status_code != 200:
-            print(f"eBay HTML fallback error: {r.status_code}")
+            print(f"eBay sold search scrape error: {r.status_code}")
             return []
     except Exception as e:
-        print(f"eBay HTML fallback request failed: {e}")
+        print(f"eBay sold search scrape request failed: {e}")
         return []
     soup = BeautifulSoup(r.text, "html.parser")
     items = []
-    for li in soup.select("li.s-item.s-item__pl-on-bottom"):
+    seen = set()
+    for li in soup.select("li.s-item"):
         try:
             title_el = li.select_one(".s-item__title")
             price_el = li.select_one(".s-item__price")
-            date_el = li.select_one(".s-item__endedDate")
             link_el = li.select_one("a.s-item__link")
-            title = title_el.get_text(strip=True) if title_el else ""
-            price_text = price_el.get_text(strip=True) if price_el else ""
-            price = _clean_price(price_text) if price_text else 0
-            if not title or price <= 0.01 or "shop on ebay" in title.lower():
+            title = title_el.get_text(" ", strip=True) if title_el else ""
+            price_text = price_el.get_text(" ", strip=True) if price_el else ""
+            url = link_el.get("href", "") if link_el else ""
+            item_id = _extract_item_id_from_url(url)
+            key = item_id or (title + '|' + price_text)
+            if not title or not price_text or key in seen:
                 continue
+            if "shop on ebay" in title.lower() or "sponsored" in title.lower():
+                continue
+            price = _clean_price(price_text)
+            if not price or price <= 0.01:
+                continue
+
             sold_date = None
-            if date_el:
-                date_text = date_el.get_text(strip=True)
-                m = re.search(r'(\w{3}\s+\d{1,2},\s+\d{4})', date_text)
-                if m:
-                    try:
-                        sold_date = datetime.strptime(m.group(1), "%b %d, %Y").strftime("%Y-%m-%d")
-                    except ValueError:
-                        pass
+            text_blob = li.get_text(" ", strip=True)
+            m = re.search(r'(?:Sold|Ended)\s+(\w{3}\s+\d{1,2},\s+\d{4})', text_blob, re.IGNORECASE)
+            if not m:
+                m = re.search(r'(\w{3}\s+\d{1,2},\s+\d{4})', text_blob)
+            if m:
+                try:
+                    sold_date = datetime.strptime(m.group(1), "%b %d, %Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    sold_date = None
+
             cond = _ebay_condition_to_canonical(title)
             items.append({
-                "title": title, "price": price, "sold_date": sold_date,
+                "title": title,
+                "price": price,
+                "sold_date": sold_date or "",
                 "condition": cond,
-                "url": link_el.get("href", "") if link_el else "",
-                "source": "eBay HTML",
+                "url": url,
+                "item_id": item_id,
+                "source": "eBay Sold Search",
             })
+            seen.add(key)
             if len(items) >= limit:
                 break
         except Exception:
             continue
-    print(f"eBay HTML fallback returned {len(items)} items for '{query}'")
+    print(f"eBay sold search scrape returned {len(items)} items for '{query}'")
     return items
 
 # ── PriceCharting (games only, optional) ─────────────────────────────────
@@ -1432,23 +1444,11 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         active_items_raw = future_active.result()
 
     sold_candidates = _filter_by_relevance(sold_items_raw, q)
-    source_label = "eBay"
+    source_label = "eBay Sold Search"
     if sold_items_raw and sold_items_raw[0].get("source"):
-        source_label = sold_items_raw[0]["source"].replace("eBay ", "")
+        source_label = sold_items_raw[0]["source"]
 
-    # 2. PriceCharting fallback for games
-    if not sold_candidates and ENABLE_PRICECHARTING and _is_gaming_query(q):
-        try:
-            products = _search_pricecharting(q)
-            if products and products[0].get("relevance", 0) >= 0.3:
-                pc_data = _scrape_pricecharting_detail(products[0]["url"])
-                if pc_data and pc_data.get("sold_listings"):
-                    sold_candidates = _filter_by_relevance(pc_data["sold_listings"], q)
-                    source_label = "PriceCharting"
-        except Exception:
-            pass
-
-    # 3. Real eBay active listings (already fetched in parallel)
+    # 2. Real eBay active listings (already fetched in parallel)
     active_items = _filter_by_relevance(active_items_raw, q)
     active_ids = {_extract_item_id_from_url(it.get("url", "")) for it in active_items if _extract_item_id_from_url(it.get("url", ""))}
 
@@ -1458,26 +1458,23 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
     sold_source_breakdown = _sold_source_breakdown(sold_candidates)
 
     primary_source = next(iter(sold_source_breakdown.keys()), source_label)
-    data_source = (
-        f"PriceCharting ({len(sold_items)} validated of {len(sold_candidates)} relevant listings)"
-        if primary_source == "PriceCharting"
-        else f"Sold comps ({len(sold_items)} validated of {len(sold_candidates)} relevant items via {', '.join(list(sold_source_breakdown.keys())[:3]) or source_label})"
-    )
+    data_source = f"Verified sold listings ({len(sold_items)} validated of {len(sold_candidates)} relevant items via {primary_source or source_label})"
     confidence = "high" if len(sold_items) >= 5 else "medium" if len(sold_items) > 0 else "low"
+    sold_source_status = "available" if sold_candidates else "unavailable"
     if sold_items:
         market_note = (
-            f"Validated sold comps from stronger sold sources first (HTML/Finding preferred, Browse last). "
-            f"{len(excluded_sold)} candidate comps excluded for missing/future dates or active overlap."
+            f"Verified sold listings are sourced only from eBay's sold/completed search surface. "
+            f"{len(excluded_sold)} sold-search results were excluded for missing/future dates, active overlap, or product mismatch."
             if excluded_sold else
-            "Validated sold comps from stronger sold sources first (HTML/Finding preferred, Browse last)."
+            "Verified sold listings are sourced only from eBay's sold/completed search surface."
         )
     elif sold_candidates:
         market_note = (
-            f"Sold candidates were found from {', '.join(list(sold_source_breakdown.keys())[:3])}, but all {len(sold_candidates)} were excluded from pricing "
-            f"due to missing/future dates or active overlap."
+            f"Sold-search results were found from eBay, but all {len(sold_candidates)} were excluded from pricing "
+            f"due to missing/future dates, active overlap, or product mismatch."
         )
     else:
-        market_note = "No relevant recent eBay sold listings found."
+        market_note = "Verified sold listings are unavailable right now. Use the eBay sold search link below to verify manually."
 
     # Filter
     sold_filtered = _filter_by_condition(sold_items, filter_condition)
@@ -1547,6 +1544,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         "excluded_sold": excluded_sold,
         "active_listings": active_filtered,
         "data_source": data_source,
+        "sold_source_status": sold_source_status,
         "confidence": confidence,
         "confidence_label": {
             "high": "✅ High confidence — real eBay sales",
