@@ -47,6 +47,29 @@ var CLAB = {
 };
 function CL(c) { return CLAB[c] || c || 'Unknown'; }
 
+var MARKET_SEGMENT_HELP = {
+  auto:'Auto market detection',
+  strict:'Strict exact market',
+  broad:'Broad market',
+  phone_exact_storage:'Phones: Exact storage',
+  phone_any_storage:'Phones: Any storage',
+  phone_allow_damaged:'Phones: Allow damaged / as-is',
+  shoe_adult:'Shoes: Adult only',
+  shoe_youth:'Shoes: Youth / GS / Toddler',
+  shoe_womens:'Shoes: Women\'s',
+  card_raw:'Cards: Raw only',
+  card_graded:'Cards: Graded only',
+  tool_only:'Tools: Tool only',
+  tool_kit:'Tools: Kit / battery included',
+  book_standard:'Books: Standard copy',
+  book_collectible:'Books: Collectible / special edition',
+  console_standard:'Console: Standard model',
+  console_special_edition:'Console: Special edition',
+  console_console_only:'Console: Console / tablet only'
+};
+
+function segLabel(v) { return MARKET_SEGMENT_HELP[v] || MARKET_SEGMENT_HELP.auto; }
+
 // Theme
 if (localStorage.getItem('ps-thm') === 'light') {
   document.documentElement.setAttribute('data-theme','light');
@@ -260,6 +283,9 @@ function clearAll() {
   D('catSearch').value = '';
   D('catId').value = '';
   D('catSug').style.display = 'none';
+  if (D('marketSeg')) D('marketSeg').value = 'auto';
+  if (D('qdSeg')) D('qdSeg').value = 'auto';
+  if (D('photoMarketSeg')) D('photoMarketSeg').value = 'auto';
   data = null;
   D('res').classList.remove('on');
   D('res').innerHTML = '';
@@ -293,12 +319,14 @@ async function search(filterCond) {
   var sh = parseFloat(D('ship').value) || 0;
   var pr = parseFloat(D('promo').value) || 0;
   var catId = D('catId').value || '';
+  var seg = D('marketSeg') ? (D('marketSeg').value || 'auto') : 'auto';
   var u = '/api/search?q=' + encodeURIComponent(q) + '&period=' + period + '&condition=' + encodeURIComponent(c);
   if (bp > 0) u += '&buy_price=' + bp.toFixed(2);
   u += '&store_tier=' + st;
   if (sh > 0) u += '&shipping=' + sh.toFixed(2);
   if (pr > 0) u += '&promoted_rate=' + pr.toFixed(2);
   if (catId) u += '&ebay_category_id=' + encodeURIComponent(catId);
+  if (seg && seg !== 'auto') u += '&market_segment=' + encodeURIComponent(seg);
   try {
     var r = await fetch(u);
     var respData = await r.json();
@@ -318,6 +346,7 @@ async function search(filterCond) {
 D('qb').onclick = function() { search(); };
 D('q').onkeydown = function(e) { if (e.key === 'Enter') search(); };
 D('cond').onchange = function() { if (data) { recalcFromExistingData(); } else { search(); } };
+if (D('marketSeg')) D('marketSeg').onchange = function() { if (D('q').value.trim()) search(); };
 
 // When only financial parameters change, recalculate from existing data (no eBay API call)
 D('storeTier').onchange = function() { recalcFromExistingData(); };
@@ -339,6 +368,7 @@ async function recalcFromExistingData() {
   data.store_tier = D('storeTier').value || 'none';
   data.promoted_rate = parseFloat(D('promo').value) || 0;
   data.active_filter_condition = D('cond').value || 'all';
+  data.market_segment = D('marketSeg') ? (D('marketSeg').value || 'auto') : 'auto';
   try {
     ld(true);
     var r = await fetch('/api/recalculate', {
@@ -742,6 +772,11 @@ function buildDataSource(res, d) {
     noteDiv.style.cssText = 'font-size:.65rem;color:var(--am);margin-top:6px;padding:4px 8px;background:rgba(251,191,36,.1);border-radius:6px';
     noteDiv.textContent = d.market_note;
   }
+  if (d.market_segment && d.market_segment !== 'auto') {
+    var segDiv = EL('div', '', dr);
+    segDiv.style.cssText = 'font-size:.65rem;color:var(--t2);margin-top:6px';
+    segDiv.textContent = 'Market segment: ' + segLabel(d.market_segment);
+  }
   if (d.sold_validation_summary) {
     var sv = d.sold_validation_summary;
     var reasonText = '';
@@ -1010,9 +1045,10 @@ async function rqd() {
   if (!inp) return;
   var st = D('qdst').value || 'none';
   var sh = parseFloat(D('qds').value) || 0;
+  var seg = D('qdSeg') ? (D('qdSeg').value || 'auto') : 'auto';
   D('qdg').textContent = '...';
   try {
-    var r = await fetch('/api/quick-deal?input=' + encodeURIComponent(inp) + '&store_tier=' + st + '&shipping=' + sh.toFixed(2));
+    var r = await fetch('/api/quick-deal?input=' + encodeURIComponent(inp) + '&store_tier=' + st + '&shipping=' + sh.toFixed(2) + '&market_segment=' + encodeURIComponent(seg));
     var respData = await r.json();
     if (!r.ok) throw new Error(respData.error || 'Failed');
     var d = respData;
@@ -1047,6 +1083,7 @@ async function rqd() {
         D('storeTier').value = D('qdst').value;
         D('q').value = d.item_name || '';
         if (d.detected_condition) D('cond').value = d.detected_condition;
+        if (D('marketSeg') && D('qdSeg')) D('marketSeg').value = D('qdSeg').value || 'auto';
         D('promo').value = '0';  // reset ad rate for fresh analysis in search
         showPage('search');
         if (data) renderAll(data);
@@ -1752,6 +1789,12 @@ function openPhotoModal(target) {
   if (container) container.innerHTML = '';
   if (D('photoContext')) D('photoContext').value = '';
   if (D('photoDesc')) D('photoDesc').value = '';
+  if (D('photoMarketSeg')) {
+    var baseSeg = 'auto';
+    if (activePhotoTarget === 'quick' && D('qdSeg')) baseSeg = D('qdSeg').value || 'auto';
+    else if (D('marketSeg')) baseSeg = D('marketSeg').value || 'auto';
+    D('photoMarketSeg').value = baseSeg;
+  }
   if (D('photoResWrap')) D('photoResWrap').style.display = 'none';
   if (D('photoInitialClose')) D('photoInitialClose').style.display = 'block';
   if (D('photoAnalyzeBtn')) {
@@ -1920,11 +1963,13 @@ if (D('photoOv')) D('photoOv').onclick = function(e) { if (e.target === D('photo
 if (D('photoSearchBtn')) D('photoSearchBtn').onclick = function() {
   var desc = D('photoDesc').value.trim();
   if (!desc || desc === '🔄 Analyzing image(s)...') return;
+  var seg = D('photoMarketSeg') ? (D('photoMarketSeg').value || 'auto') : 'auto';
   HIDE('photoOv');
   if (activePhotoTarget === 'lot') {
     D('li').value = desc; D('ladd').onclick();
   } else if (activePhotoTarget === 'quick') {
     D('qd').value = desc;
+    if (D('qdSeg')) D('qdSeg').value = seg;
     if (lastPhotoEstimate && lastPhotoEstimate.estimate) {
       D('qds').value = FMT(lastPhotoEstimate.estimate.mid_usd);
       _showShipBadgeResult('qdsEstBadge', desc, lastPhotoEstimate.estimate, { cached: !!lastPhotoEstimate.estimate._cached });
@@ -1932,6 +1977,7 @@ if (D('photoSearchBtn')) D('photoSearchBtn').onclick = function() {
     rqd();
   } else {
     D('q').value = desc;
+    if (D('marketSeg')) D('marketSeg').value = seg;
     if (lastPhotoEstimate && lastPhotoEstimate.estimate) {
       D('ship').value = FMT(lastPhotoEstimate.estimate.mid_usd);
       _showShipBadgeResult('shipEstBadge', desc, lastPhotoEstimate.estimate, { cached: !!lastPhotoEstimate.estimate._cached });

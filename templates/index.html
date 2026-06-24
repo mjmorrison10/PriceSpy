@@ -114,6 +114,29 @@
                 <input type="hidden" id="catId">
                 <div id="catSug" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--s);border:1px solid var(--b);border-radius:var(--rs);z-index:50;max-height:200px;overflow:auto"></div>
             </div>
+            <div class="rw mt1">
+                <select id="marketSeg" style="width:260px">
+                    <option value="auto">Market segment: Auto</option>
+                    <option value="strict">Strict exact market</option>
+                    <option value="broad">Broad market</option>
+                    <option value="phone_exact_storage">Phones: Exact storage</option>
+                    <option value="phone_any_storage">Phones: Any storage</option>
+                    <option value="phone_allow_damaged">Phones: Allow damaged / as-is</option>
+                    <option value="shoe_adult">Shoes: Adult only</option>
+                    <option value="shoe_youth">Shoes: Youth / GS / Toddler</option>
+                    <option value="shoe_womens">Shoes: Women's</option>
+                    <option value="card_raw">Cards: Raw only</option>
+                    <option value="card_graded">Cards: Graded only</option>
+                    <option value="tool_only">Tools: Tool only</option>
+                    <option value="tool_kit">Tools: Kit / battery included</option>
+                    <option value="book_standard">Books: Standard copy</option>
+                    <option value="book_collectible">Books: Collectible / special edition</option>
+                    <option value="console_standard">Console: Standard model</option>
+                    <option value="console_special_edition">Console: Special edition</option>
+                    <option value="console_console_only">Console: Console / tablet only</option>
+                </select>
+                <span style="font-size:.74rem;color:var(--t2)">Use this to narrow the exact resale market you mean.</span>
+            </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;min-height:20px;margin-bottom:8px"><span class="spn" id="sp"></span><span id="st" style="font-size:.78rem;color:var(--t2)"></span></div>
         <div class="er" id="em"></div>
@@ -142,6 +165,28 @@
                 </select>
                 <input type="number" id="qds" placeholder="Ship" step="0.01" style="width:80px">
                 <button class="bt bt-p" id="qdsEstBtn" title="Estimate shipping cost with Gemini" style="padding:10px 12px">📦</button>
+            </div>
+            <div class="rw mt1">
+                <select id="qdSeg" style="width:260px">
+                    <option value="auto">Market segment: Auto</option>
+                    <option value="strict">Strict exact market</option>
+                    <option value="broad">Broad market</option>
+                    <option value="phone_exact_storage">Phones: Exact storage</option>
+                    <option value="phone_any_storage">Phones: Any storage</option>
+                    <option value="phone_allow_damaged">Phones: Allow damaged / as-is</option>
+                    <option value="shoe_adult">Shoes: Adult only</option>
+                    <option value="shoe_youth">Shoes: Youth / GS / Toddler</option>
+                    <option value="shoe_womens">Shoes: Women's</option>
+                    <option value="card_raw">Cards: Raw only</option>
+                    <option value="card_graded">Cards: Graded only</option>
+                    <option value="tool_only">Tools: Tool only</option>
+                    <option value="tool_kit">Tools: Kit / battery included</option>
+                    <option value="book_standard">Books: Standard copy</option>
+                    <option value="book_collectible">Books: Collectible / special edition</option>
+                    <option value="console_standard">Console: Standard model</option>
+                    <option value="console_special_edition">Console: Special edition</option>
+                    <option value="console_console_only">Console: Console / tablet only</option>
+                </select>
             </div>
             <div id="qdsEstBadge" class="ship-badge" style="display:none;margin-top:6px"></div>
             <div id="vst" style="font-size:.7rem;color:var(--a);margin-top:4px;display:none"></div>
@@ -427,6 +472,26 @@
     </div>
     <div id="photoThumbnails" style="display:flex;gap:8px;overflow-x:auto;margin-bottom:12px;flex-wrap:wrap;min-height:10px"></div>
     <input type="text" id="photoContext" placeholder="Optional extra hint (e.g. 'model # is DCD791')" class="mb1">
+    <select id="photoMarketSeg" class="mb1" style="width:100%">
+        <option value="auto">Market segment: Auto</option>
+        <option value="strict">Strict exact market</option>
+        <option value="broad">Broad market</option>
+        <option value="phone_exact_storage">Phones: Exact storage</option>
+        <option value="phone_any_storage">Phones: Any storage</option>
+        <option value="phone_allow_damaged">Phones: Allow damaged / as-is</option>
+        <option value="shoe_adult">Shoes: Adult only</option>
+        <option value="shoe_youth">Shoes: Youth / GS / Toddler</option>
+        <option value="shoe_womens">Shoes: Women's</option>
+        <option value="card_raw">Cards: Raw only</option>
+        <option value="card_graded">Cards: Graded only</option>
+        <option value="tool_only">Tools: Tool only</option>
+        <option value="tool_kit">Tools: Kit / battery included</option>
+        <option value="book_standard">Books: Standard copy</option>
+        <option value="book_collectible">Books: Collectible / special edition</option>
+        <option value="console_standard">Console: Standard model</option>
+        <option value="console_special_edition">Console: Special edition</option>
+        <option value="console_console_only">Console: Console / tablet only</option>
+    </select>
     <button class="bt bt-p mb1" id="photoAnalyzeBtn" style="width:100%;background:var(--a);color:#fff;font-size:1.05rem;padding:12px">✨ Analyze with Gemini</button>
     <div id="photoResWrap" style="display:none;border-top:1px solid var(--b);padding-top:12px;margin-top:4px">
         <div class="sb" style="margin-bottom:6px;color:var(--t2)">Gemini AI Search Result:</div>

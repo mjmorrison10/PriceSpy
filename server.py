@@ -686,7 +686,7 @@ def _summarize_excluded_reasons(items: list[dict]) -> dict:
     return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
-def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], today_ymd: str) -> dict:
+def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], today_ymd: str, market_segment: str = 'auto') -> dict:
     comp = dict(item or {})
     sold_date = _safe_ymd(comp.get('sold_date', ''))
     item_id = comp.get('item_id') or _extract_item_id_from_url(comp.get('url', ''))
@@ -711,7 +711,7 @@ def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], toda
     if active_overlap:
         reject_reasons.append('active_overlap')
 
-    reject_reasons.extend(_category_specific_mismatch_reasons(query, comp.get('title', '')))
+    reject_reasons.extend(_category_specific_mismatch_reasons(query, comp.get('title', ''), market_segment))
 
     if source == 'eBay Sold Search':
         source_conf = 'high'
@@ -1255,10 +1255,27 @@ def _query_targets_youth_shoes(query: str) -> bool:
     return bool(re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby|td|ps)', q))
 
 
-def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
+MARKET_SEGMENTS = {
+    'auto', 'strict', 'broad',
+    'phone_exact_storage', 'phone_any_storage', 'phone_allow_damaged',
+    'shoe_adult', 'shoe_youth', 'shoe_womens',
+    'card_raw', 'card_graded',
+    'tool_only', 'tool_kit',
+    'book_standard', 'book_collectible',
+    'console_standard', 'console_special_edition', 'console_console_only',
+}
+
+
+def _normalize_market_segment(segment: str) -> str:
+    seg = (segment or 'auto').strip().lower()
+    return seg if seg in MARKET_SEGMENTS else 'auto'
+
+
+def _category_specific_mismatch_reasons(query: str, title: str, market_segment: str = 'auto') -> list[str]:
     ql = (query or '').lower()
     tl = (title or '').lower()
     reasons = []
+    seg = _normalize_market_segment(market_segment)
     category = _detect_ebay_category(query)
 
     is_phone_query = 'iphone' in ql
@@ -1277,14 +1294,15 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
             reasons.append('wrong_phone_variant')
         q_storage = _extract_requested_storage_gb(ql)
         title_storages = set(re.findall(r'(16|32|64|128|256|512|1024)\s*gb', tl))
-        if q_storage and title_storages and q_storage not in title_storages:
+        storage_menu_pattern = bool(re.search(r'\b(16|32|64|128|256|512|1024)\s*/\s*(16|32|64|128|256|512|1024)', tl)) or bool(re.search(r'\b128gb\s+256gb\b|\b128gb\s+256gb\s+512gb\b|\b128/256/512\b', tl))
+        if q_storage and title_storages and q_storage not in title_storages and seg not in ['phone_any_storage', 'broad']:
             reasons.append('wrong_storage')
-        if q_storage and len(title_storages) > 1:
+        if q_storage and (len(title_storages) > 1 or storage_menu_pattern) and seg not in ['phone_any_storage', 'broad']:
             reasons.append('ambiguous_multi_storage_listing')
         carrier_terms = ['verizon', 'at&t', 'att', 't-mobile', 'tmobile', 'sprint', 'boost mobile', 'cricket']
         if 'unlocked' in ql and any(term in tl for term in carrier_terms) and 'unlocked' not in tl and 'factory unlocked' not in tl:
             reasons.append('locked_phone')
-        if not _query_allows_damage(query) and any(term in tl for term in ['bad lcd', 'sold as is', 'as is', 'as-is', 'cracked', 'broken', 'for parts', 'bad esn', 'icloud', 'read']):
+        if seg != 'phone_allow_damaged' and not _query_allows_damage(query) and any(term in tl for term in ['bad lcd', 'sold as is', 'as is', 'as-is', 'cracked', 'broken', 'for parts', 'bad esn', 'icloud', 'read']):
             reasons.append('damaged_phone_listing')
 
     if is_console_query:
@@ -1302,9 +1320,16 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
         if any(term in tl for term in ['console only', 'tablet only']):
             if 'console only' not in ql and 'tablet only' not in ql:
                 reasons.append('console_only_variant')
-        if any(term in tl for term in ['special edition', 'splatoon', 'pokemon scarlet', 'scarlet & violet', 'tears of the kingdom', 'zelda edition']):
-            if all(term not in ql for term in ['special edition', 'splatoon', 'pokemon', 'scarlet', 'violet', 'zelda', 'tears of the kingdom']):
+        special_terms = ['special edition', 'splatoon', 'pokemon scarlet', 'scarlet & violet', 'tears of the kingdom', 'zelda edition']
+        if any(term in tl for term in special_terms):
+            if seg == 'console_standard':
                 reasons.append('special_edition_console')
+            elif seg not in ['console_special_edition', 'broad'] and all(term not in ql for term in ['special edition', 'splatoon', 'pokemon', 'scarlet', 'violet', 'zelda', 'tears of the kingdom']):
+                reasons.append('special_edition_console')
+        if seg == 'console_special_edition' and not any(term in tl for term in special_terms):
+            reasons.append('non_special_edition_console')
+        if seg == 'console_console_only' and not any(term in tl for term in ['console only', 'tablet only']):
+            reasons.append('non_console_only_listing')
 
     if is_tool_query:
         if any(term in tl for term in ['chuck', 'switch label', 'tool case', 'case only', 'housing', 'gear shifter', 'gear selector', 'transmission', 'button']):
@@ -1316,13 +1341,19 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
                 reasons.append('wrong_tool_model')
             elif len([m for m in t_models if m != q_models[0]]) >= 1 and 'bundle' not in ql and 'kit' not in ql and 'combo' not in ql:
                 reasons.append('multi_model_tool_listing')
-        if any(term in tl for term in ['combo kit', '2-tool', '3-tool', 'with worklight', 'worklight']) and not any(term in ql for term in ['kit', 'combo', 'worklight']):
+        kit_terms = ['combo kit', '2-tool', '3-tool', 'with worklight', 'worklight', 'battery', 'charger', 'case']
+        if any(term in tl for term in kit_terms) and (seg == 'tool_only' or (seg not in ['tool_kit', 'broad'] and not any(term in ql for term in ['kit', 'combo', 'worklight', 'battery', 'charger']))):
             reasons.append('tool_bundle_listing')
+        if seg == 'tool_kit' and not any(term in tl for term in kit_terms):
+            reasons.append('non_kit_tool_listing')
 
     if is_card_query:
-        if any(term in tl for term in ['psa', 'bgs', 'cgc', 'sgc', 'graded', 'ace graded']):
-            if not any(term in ql for term in ['psa', 'bgs', 'cgc', 'sgc', 'graded']):
+        graded_terms = ['psa', 'bgs', 'cgc', 'sgc', 'graded', 'ace graded', 'beckett']
+        if any(term in tl for term in graded_terms):
+            if seg == 'card_raw' or (seg != 'card_graded' and not any(term in ql for term in ['psa', 'bgs', 'cgc', 'sgc', 'graded', 'beckett'])):
                 reasons.append('graded_card')
+        if seg == 'card_graded' and not any(term in tl for term in graded_terms):
+            reasons.append('non_graded_card')
         if 'base set' in ql and 'base set 2' in tl:
             reasons.append('wrong_card_set')
         if 'japanese' in tl and 'japanese' not in ql:
@@ -1343,18 +1374,38 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
             reasons.append('wrong_book_format')
         if 'paperback' in ql and any(term in tl for term in ['hardcover', 'hardback']):
             reasons.append('wrong_book_format')
+        collectible_terms = ['signed', 'limited', 'illustrated', 'leather', 'collectible', 'club', 'deluxe', 'special edition']
         if any(term in tl for term in ['casebook', 'study guide', 'student', 'cooking', 'entertaining guide', 'understanding the ', 'and other works', 'trimalchio']):
             reasons.append('book_companion_or_variant')
+        if seg == 'book_standard' and any(term in tl for term in collectible_terms):
+            reasons.append('collectible_book_variant')
+        if seg == 'book_collectible' and not any(term in tl for term in collectible_terms):
+            reasons.append('non_collectible_book')
         if any(term in tl for term in ['set of', 'book set']) and 'set' not in ql:
             reasons.append('book_set')
 
     if is_shoe_query:
-        if re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby|td|ps)', tl):
-            if not _query_targets_youth_shoes(query):
+        youth_terms = ['grade school', 'youth', 'toddler', 'preschool', 'infant', 'baby', ' td ', ' ps ', ' gs ', '5.5y', '6y', '7y']
+        has_youth = any(term in (' ' + tl + ' ') for term in youth_terms)
+        has_womens = any(term in tl for term in ['women', 'womens', 'women’s', 'wmns'])
+        if seg == 'shoe_adult':
+            if has_youth:
                 reasons.append('youth_shoe_variant')
-        if any(term in tl for term in ['women', 'womens', 'women’s', 'wmns']) and not any(term in ql for term in ['women', 'womens', 'women’s', 'wmns']):
-            reasons.append('gender_specific_shoe_variant')
-
+            if has_womens:
+                reasons.append('gender_specific_shoe_variant')
+        elif seg == 'shoe_youth':
+            if not has_youth:
+                reasons.append('non_youth_shoe_listing')
+        elif seg == 'shoe_womens':
+            if not has_womens:
+                reasons.append('non_womens_shoe_listing')
+            if has_youth:
+                reasons.append('youth_shoe_variant')
+        else:
+            if has_youth and not _query_targets_youth_shoes(query):
+                reasons.append('youth_shoe_variant')
+            if has_womens and not any(term in ql for term in ['women', 'womens', 'women’s', 'wmns']) and seg != 'broad':
+                reasons.append('gender_specific_shoe_variant')
     seen = set()
     deduped = []
     for reason in reasons:
@@ -1364,7 +1415,7 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
     return deduped
 
 
-def _is_relevant_listing(query: str, title: str) -> bool:
+def _is_relevant_listing(query: str, title: str, market_segment: str = 'auto') -> bool:
     """Return True only when a listing title appears to match the searched item.
 
     For multi-word searches we require every important query term to appear,
@@ -1374,7 +1425,7 @@ def _is_relevant_listing(query: str, title: str) -> bool:
     """
     if _is_accessory_or_part_listing(title, query):
         return False
-    if _category_specific_mismatch_reasons(query, title):
+    if _category_specific_mismatch_reasons(query, title, market_segment):
         return False
     if _requires_strict_phrase(query) and not _strict_phrase_match(query, title):
         return False
@@ -1410,7 +1461,7 @@ def _extract_product_name_from_titles(items: list[dict], query: str) -> str:
         best = re.sub(f"(?i)\\b{junk}\\b", "", best).strip()
     return best.strip(" -,/|") or titles[0]
 
-def _filter_by_relevance(items: list[dict], query: str) -> list[dict]:
+def _filter_by_relevance(items: list[dict], query: str, market_segment: str = 'auto') -> list[dict]:
     """Filter eBay/market listings down to titles relevant to the query."""
     if _is_barcode_query(query):
         filtered = []
@@ -1424,7 +1475,7 @@ def _filter_by_relevance(items: list[dict], query: str) -> list[dict]:
     filtered = []
     for it in items or []:
         title = it.get("title", "")
-        if _is_relevant_listing(query, title):
+        if _is_relevant_listing(query, title, market_segment):
             it["relevance"] = round(_relevance_score(query, title), 3)
             filtered.append(it)
 
@@ -1748,9 +1799,10 @@ import concurrent.futures
 def _do_search(q: str, period_days: int, period: str, filter_condition: str,
                buy_price: float = 0.0, store_tier: str = "none",
                shipping_cost: float = 0.0, promoted_rate: float = 0.0,
-               ebay_category_id: str = "") -> dict:
+               ebay_category_id: str = "", market_segment: str = 'auto') -> dict:
     now = datetime.now(timezone.utc)
     today_ymd = now.strftime("%Y-%m-%d")
+    market_segment = _normalize_market_segment(market_segment)
     category = _detect_ebay_category(q, ebay_category_id)
 
     # Use ThreadPoolExecutor for parallel API calls
@@ -1762,17 +1814,17 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         sold_items_raw = future_sold.result()
         active_items_raw = future_active.result()
 
-    sold_candidates = _filter_by_relevance(sold_items_raw, q)
+    sold_candidates = _filter_by_relevance(sold_items_raw, q, market_segment)
     sold_source_debug = SOLD_SOURCE_DEBUG.get(_sold_debug_key(q, filter_condition), {})
     source_label = "Apify Sold Listings" if (USE_APIFY_SOLD and APIFY_TOKEN and APIFY_SOLD_ACTOR) else "eBay Sold Search"
     if sold_items_raw and sold_items_raw[0].get("source"):
         source_label = sold_items_raw[0]["source"]
 
     # 2. Real eBay active listings (already fetched in parallel)
-    active_items = _filter_by_relevance(active_items_raw, q)
+    active_items = _filter_by_relevance(active_items_raw, q, market_segment)
     active_ids = {_extract_item_id_from_url(it.get("url", "")) for it in active_items if _extract_item_id_from_url(it.get("url", ""))}
 
-    sold_candidates = [_validate_sold_item_basic(it, q, active_ids, today_ymd) for it in sold_candidates]
+    sold_candidates = [_validate_sold_item_basic(it, q, active_ids, today_ymd, market_segment) for it in sold_candidates]
     sold_items = [it for it in sold_candidates if it.get("comp_valid")]
     excluded_sold = [it for it in sold_candidates if not it.get("comp_valid")]
     sold_source_breakdown = _sold_source_breakdown(sold_candidates)
@@ -1848,6 +1900,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         "condition_labels": {k: v["label"] for k, v in EBAY_COND.items()},
         "category": category,
         "ebay_category_id": ebay_category_id,
+        "market_segment": market_segment,
         "sold_summary": sold_stats,
         "active_summary": active_stats,
         "condition_sold": condition_sold,
@@ -1925,12 +1978,13 @@ def api_search():
     shipping_cost = float(request.args.get("shipping", "0") or 0)
     promoted_rate = float(request.args.get("promoted_rate", "0") or 0)
     ebay_category_id = request.args.get("ebay_category_id", "").strip()
+    market_segment = _normalize_market_segment(request.args.get("market_segment", "auto"))
 
     if not q:
         return jsonify({"error": "Missing query"}), 400
 
     import copy
-    base_cache_key = f"{q.lower()}|{period}|{filter_condition}|{ebay_category_id}"
+    base_cache_key = f"{q.lower()}|{period}|{filter_condition}|{ebay_category_id}|{market_segment}"
     if base_cache_key in PRICE_CACHE:
         cached = copy.deepcopy(PRICE_CACHE[base_cache_key])
         age = (datetime.now(timezone.utc) - cached.get("_cached_at", datetime.now(timezone.utc))).total_seconds()
@@ -1940,6 +1994,7 @@ def api_search():
             cached["store_tier"] = store_tier
             cached["shipping_cost"] = shipping_cost if shipping_cost > 0 else 0
             cached["promoted_rate"] = promoted_rate
+            cached["market_segment"] = market_segment
             cached["flip_analysis"] = _analyze_flip(
                 cached.get("sold_summary", {}), cached.get("active_summary", {}),
                 cached.get("recent_sold", []), cached.get("active_listings", []),
@@ -1964,7 +2019,7 @@ def api_search():
 
     try:
         result = _do_search(q, period_days, period, filter_condition, buy_price,
-                            store_tier, shipping_cost, promoted_rate, ebay_category_id)
+                            store_tier, shipping_cost, promoted_rate, ebay_category_id, market_segment)
         result["_cached_at"] = datetime.now(timezone.utc)
         PRICE_CACHE[base_cache_key] = copy.deepcopy(result)
         return jsonify(result)
@@ -2039,6 +2094,7 @@ def api_recalculate():
     shipping_cost = _as_float(d.get("shipping_cost"), 0)
     promoted_rate = _as_float(d.get("promoted_rate"), 0)
     ebay_category_id = str(d.get("ebay_category_id") or "")
+    market_segment = _normalize_market_segment(str(d.get("market_segment") or "auto"))
     category = str(d.get("category") or "") or _detect_ebay_category(q, ebay_category_id)
 
     sold_items = _clean_items(d.get("recent_sold"))
@@ -2578,6 +2634,7 @@ def api_quick_deal():
         store_tier = "none"
     shipping_cost = float(request.args.get("shipping", "0") or 0)
     ebay_category_id = request.args.get("ebay_category_id", "").strip()
+    market_segment = _normalize_market_segment(request.args.get("market_segment", "auto"))
 
     # Parse price
     price_match = re.search(r'\$?\s*(\d+(?:\.\d{1,2})?)\s*$', raw)
@@ -2613,7 +2670,7 @@ def api_quick_deal():
 
     try:
         result = _do_search(item_name, 180, "6m", detected_condition, buy_price,
-                            store_tier, shipping_cost, 0, ebay_category_id)
+                            store_tier, shipping_cost, 0, ebay_category_id, market_segment)
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"Search failed: {str(e)}"}), 500
@@ -2656,6 +2713,7 @@ def api_quick_deal():
             "Moderate" if (isinstance(sat, dict) and sat.get("active_sold_ratio", 1) < 3) else
             "High" if (isinstance(sat, dict) and sat.get("active_sold_ratio", 1) < 8) else "Very High"
         ),
+        "market_segment": market_segment,
         "full_result": result,
     })
 
