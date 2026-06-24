@@ -767,7 +767,13 @@ function buildDataSource(res, d) {
     }
     var valDiv = EL('div', '', dr);
     valDiv.style.cssText = 'font-size:.65rem;color:var(--t2);margin-top:6px;padding:4px 8px;background:rgba(91,141,239,.08);border-radius:6px';
-    valDiv.textContent = 'Validated sold comps: ' + (sv.valid_count || 0) + ' | Excluded: ' + (sv.excluded_count || 0) + (reasonText ? ' · ' + reasonText : '');
+    var srcText = '';
+    if (sv.source_breakdown) {
+      var srcParts = [];
+      for (var sk in sv.source_breakdown) { srcParts.push(sk.replace('eBay ', '') + ': ' + sv.source_breakdown[sk]); }
+      srcText = srcParts.slice(0, 3).join(' · ');
+    }
+    valDiv.textContent = 'Validated sold comps: ' + (sv.valid_count || 0) + ' | Excluded: ' + (sv.excluded_count || 0) + (srcText ? ' · Sources: ' + srcText : '') + (reasonText ? ' · ' + reasonText : '');
   }
   if (d.api_missing) {
     var setupDiv = EL('div', '', dr);

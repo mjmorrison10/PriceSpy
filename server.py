@@ -438,13 +438,42 @@ def _build_sold_verification_url(query: str, title: str = '', item_id: str | Non
 def _sold_source_merge_priority(item: dict) -> tuple:
     source = item.get('source', '')
     source_rank = {
-        'eBay HTML': 3,
-        'eBay Finding API': 2,
-        'eBay Browse API': 1,
-        'PriceCharting': 0,
+        'eBay HTML': 4,
+        'eBay Finding API': 3,
+        'eBay Browse API': 2,
+        'PriceCharting': 1,
     }.get(source, 0)
     has_date = 1 if _safe_ymd(item.get('sold_date', '')) else 0
     return (has_date, source_rank)
+
+
+def _sold_identity_key(item: dict) -> str:
+    item_id = item.get('item_id') or _extract_item_id_from_url(item.get('url', ''))
+    if item_id:
+        return f"item:{item_id}"
+    url = (item.get('url') or '').split('#')[0]
+    if url:
+        return f"url:{url}"
+    return f"title:{(item.get('title') or '').strip().lower()}|price:{item.get('price')}|date:{_safe_ymd(item.get('sold_date', '')) or ''}"
+
+
+def _merge_sold_candidates(items: list[dict]) -> list[dict]:
+    best_by_key = {}
+    for item in items or []:
+        key = _sold_identity_key(item)
+        existing = best_by_key.get(key)
+        if existing is None or _sold_source_merge_priority(item) > _sold_source_merge_priority(existing):
+            best_by_key[key] = item
+    merged = list(best_by_key.values())
+    merged.sort(key=lambda it: ((it.get('sold_date') or ''), _sold_source_merge_priority(it)), reverse=True)
+    return merged
+
+
+def _sold_source_breakdown(items: list[dict]) -> dict:
+    counts = defaultdict(int)
+    for it in items or []:
+        counts[it.get('source', 'unknown')] += 1
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def _summarize_excluded_reasons(items: list[dict]) -> dict:
@@ -480,12 +509,20 @@ def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], toda
     if active_overlap:
         reject_reasons.append('active_overlap')
 
-    if source == 'eBay Browse API':
-        warning_reasons.append('browse_view_item_url')
+    if source == 'eBay HTML':
+        source_conf = 'high'
     elif source == 'eBay Finding API':
+        source_conf = 'medium'
         warning_reasons.append('finding_view_item_url')
+    elif source == 'eBay Browse API':
+        source_conf = 'low'
+        warning_reasons.append('browse_view_item_url')
     elif source == 'PriceCharting':
+        source_conf = 'low'
         warning_reasons.append('non_ebay_source')
+
+    if comp.get('is_multi_variation'):
+        warning_reasons.append('multi_variation_listing')
 
     comp['item_id'] = item_id
     comp['sold_date'] = sold_date or ''
@@ -501,111 +538,116 @@ def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], toda
     return comp
 
 # ── eBay Sold Data (Finding API) ───────────────────────────────────────
+def _fetch_ebay_sold_browse(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
+    token = _get_ebay_token()
+    if not token:
+        return []
+    try:
+        filters = ["soldItemOnly:true"]
+        if condition != "all" and condition in EBAY_COND:
+            filters.append(f"conditionIds:{{{EBAY_COND[condition]['id']}}}")
+        url = f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search"
+        params = {
+            "q": query,
+            "filter": ",".join(filters),
+            "limit": str(min(limit, 50)),
+            "sort": "newlyListed",
+        }
+        r = SESSION.get(url, params=params, headers={"Authorization": f"Bearer {token}"}, timeout=20)
+        if r.status_code != 200:
+            return []
+        items = r.json().get("itemSummaries", [])
+        res = []
+        for it in items:
+            try:
+                price = float(it.get("price", {}).get("value", 0))
+                if price <= 0:
+                    continue
+                url = it.get("itemWebUrl", "")
+                res.append({
+                    "title": it.get("title", ""),
+                    "price": price,
+                    "sold_date": _safe_ymd(it.get("itemEndDate", "")) or "",
+                    "condition": _ebay_condition_to_canonical(it.get("condition", "")),
+                    "url": url,
+                    "item_id": _extract_item_id_from_url(url),
+                    "source": "eBay Browse API",
+                })
+            except Exception:
+                continue
+        return res
+    except Exception:
+        return []
+
+
+def _fetch_ebay_sold_finding(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
+    if not EBAY_CLIENT_ID:
+        return []
+    try:
+        params = {
+            "OPERATION-NAME": "findCompletedItems",
+            "SERVICE-VERSION": "1.13.0",
+            "SECURITY-APPNAME": EBAY_CLIENT_ID,
+            "RESPONSE-DATA-FORMAT": "JSON",
+            "REST-PAYLOAD": "true",
+            "GLOBAL-ID": "EBAY-US",
+            "keywords": query,
+            "paginationInput.entriesPerPage": str(min(limit, 100)),
+            "sortOrder": "EndTimeSoonest",
+            "itemFilter(0).name": "SoldItemsOnly",
+            "itemFilter(0).value": "true",
+        }
+        if condition != "all" and condition in EBAY_COND:
+            params["itemFilter(1).name"] = "Condition"
+            params["itemFilter(1).value"] = EBAY_COND[condition]["id"]
+        r = SESSION.get(EBAY_FINDING_API, params=params, timeout=20)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        response = data.get("findCompletedItemsResponse", [{}])[0]
+        if response.get("ack", [""])[0] != "Success":
+            return []
+        search_res = response.get("searchResult", [{}])
+        items = search_res[0].get("item", []) if search_res and search_res[0] else []
+        res = []
+        for it in items:
+            try:
+                price = float(it.get("sellingStatus", [{}])[0].get("currentPrice", [{}])[0].get("__value__", 0))
+                if price <= 0:
+                    continue
+                url = it.get("viewItemURL", [""])[0]
+                res.append({
+                    "title": it.get("title", [""])[0],
+                    "price": price,
+                    "sold_date": _safe_ymd(it.get("listingInfo", [{}])[0].get("endTime", "")) or "",
+                    "condition": _ebay_condition_to_canonical(it.get("condition", [{}])[0].get("conditionDisplayName", "") if it.get("condition") else ""),
+                    "url": url,
+                    "item_id": _extract_item_id_from_url(url),
+                    "listing_type": it.get("listingInfo", [{}])[0].get("listingType", "") if it.get("listingInfo") else "",
+                    "selling_state": it.get("sellingStatus", [{}])[0].get("sellingState", "") if it.get("sellingStatus") else "",
+                    "is_multi_variation": bool(it.get("isMultiVariationListing", [False])[0]) if isinstance(it.get("isMultiVariationListing"), list) else bool(it.get("isMultiVariationListing", False)),
+                    "source": "eBay Finding API",
+                })
+            except Exception:
+                continue
+        return res
+    except Exception:
+        return []
+
+
 def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
-    """Real sold/completed listings. Tries Browse API and Finding API in parallel."""
-    results = []
-    
-    def fetch_browse():
-        token = _get_ebay_token()
-        if not token: return []
-        try:
-            filters = ["soldItemOnly:true"]
-            if condition != "all" and condition in EBAY_COND:
-                filters.append(f"conditionIds:{{{EBAY_COND[condition]['id']}}}")
-            url = f"{EBAY_API_BASE}/buy/browse/v1/item_summary/search"
-            params = {
-                "q": query,
-                "filter": ",".join(filters),
-                "limit": str(min(limit, 50)),
-                "sort": "newlyListed",
-            }
-            r = SESSION.get(url, params=params, headers={"Authorization": f"Bearer {token}"}, timeout=20)
-            if r.status_code == 200:
-                data = r.json()
-                items = data.get("itemSummaries", [])
-                res = []
-                for it in items:
-                    try:
-                        price = float(it.get("price", {}).get("value", 0))
-                        if price <= 0: continue
-                        res.append({
-                            "title": it.get("title", ""),
-                            "price": price,
-                            "sold_date": it.get("itemEndDate", "")[:10],
-                            "condition": _ebay_condition_to_canonical(it.get("condition", "")),
-                            "url": it.get("itemWebUrl", ""),
-                            "source": "eBay Browse API",
-                        })
-                    except Exception: continue
-                return res
-        except Exception: pass
-        return []
+    """Return sold/completed listing candidates from all available sources, prioritizing true sold evidence."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        f_browse = executor.submit(_fetch_ebay_sold_browse, query, condition, limit)
+        f_finding = executor.submit(_fetch_ebay_sold_finding, query, condition, limit)
+        f_html = executor.submit(_scrape_ebay_sold_fallback, query, condition, min(limit, 60))
 
-    def fetch_finding():
-        if not EBAY_CLIENT_ID: return []
-        try:
-            params = {
-                "OPERATION-NAME": "findCompletedItems",
-                "SERVICE-VERSION": "1.13.0",
-                "SECURITY-APPNAME": EBAY_CLIENT_ID,
-                "RESPONSE-DATA-FORMAT": "JSON",
-                "REST-PAYLOAD": "true",
-                "GLOBAL-ID": "EBAY-US",
-                "keywords": query,
-                "paginationInput.entriesPerPage": str(min(limit, 100)),
-                "sortOrder": "EndTimeSoonest",
-                "itemFilter(0).name": "SoldItemsOnly",
-                "itemFilter(0).value": "true",
-            }
-            if condition != "all" and condition in EBAY_COND:
-                params["itemFilter(1).name"] = "Condition"
-                params["itemFilter(1).value"] = EBAY_COND[condition]["id"]
-            r = SESSION.get(EBAY_FINDING_API, params=params, timeout=20)
-            if r.status_code == 200:
-                data = r.json()
-                response = data.get("findCompletedItemsResponse", [{}])[0]
-                if response.get("ack", [""])[0] == "Success":
-                    search_res = response.get("searchResult", [{}])
-                    items = search_res[0].get("item", []) if search_res and search_res[0] else []
-                    res = []
-                    for it in items:
-                        try:
-                            price = float(it.get("sellingStatus", [{}])[0].get("currentPrice", [{}])[0].get("__value__", 0))
-                            if price <= 0: continue
-                            res.append({
-                                "title": it.get("title", [""])[0],
-                                "price": price,
-                                "sold_date": it.get("listingInfo", [{}])[0].get("endTime", "")[:10],
-                                "condition": _ebay_condition_to_canonical(it.get("condition", [{}])[0].get("conditionDisplayName", "") if it.get("condition") else ""),
-                                "url": it.get("viewItemURL", [""])[0],
-                                "source": "eBay Finding API",
-                            })
-                        except Exception: continue
-                    return res
-        except Exception: pass
-        return []
+        browse_items = f_browse.result() or []
+        finding_items = f_finding.result() or []
+        html_items = f_html.result() or []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        f1 = executor.submit(fetch_browse)
-        f2 = executor.submit(fetch_finding)
-        
-        r1 = f1.result()
-        r2 = f2.result()
-        
-    # Merge and deduplicate by URL, preferring items with real end dates and stronger sold sources.
-    best_by_key = {}
-    for item in r1 + r2:
-        key = item.get("url") or f"{item.get('title', '')}|{item.get('price', '')}"
-        existing = best_by_key.get(key)
-        if existing is None or _sold_source_merge_priority(item) > _sold_source_merge_priority(existing):
-            best_by_key[key] = item
-    results = list(best_by_key.values())
-
-    if not results:
-        # Last resort: HTML scraping
-        return _scrape_ebay_sold_fallback(query, condition, limit)
-        
-    return results
+    merged = _merge_sold_candidates(html_items + finding_items + browse_items)
+    return merged
 
 def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 60) -> list[dict]:
     """Fallback HTML scraper for eBay sold listings when API is empty or fails."""
@@ -1313,17 +1355,27 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
     sold_candidates = [_validate_sold_item_basic(it, q, active_ids, today_ymd) for it in sold_candidates]
     sold_items = [it for it in sold_candidates if it.get("comp_valid")]
     excluded_sold = [it for it in sold_candidates if not it.get("comp_valid")]
+    sold_source_breakdown = _sold_source_breakdown(sold_candidates)
 
+    primary_source = next(iter(sold_source_breakdown.keys()), source_label)
     data_source = (
         f"PriceCharting ({len(sold_items)} validated of {len(sold_candidates)} relevant listings)"
-        if source_label == "PriceCharting"
-        else f"eBay Sold Listings ({len(sold_items)} validated of {len(sold_candidates)} relevant items via {source_label})"
+        if primary_source == "PriceCharting"
+        else f"Sold comps ({len(sold_items)} validated of {len(sold_candidates)} relevant items via {', '.join(list(sold_source_breakdown.keys())[:3]) or source_label})"
     )
     confidence = "high" if len(sold_items) >= 5 else "medium" if len(sold_items) > 0 else "low"
     if sold_items:
-        market_note = f"Validated sold comps from eBay sources. {len(excluded_sold)} candidate comps excluded for missing/future dates or active overlap." if excluded_sold else "Validated sold comps from eBay sources."
+        market_note = (
+            f"Validated sold comps from stronger sold sources first (HTML/Finding preferred, Browse last). "
+            f"{len(excluded_sold)} candidate comps excluded for missing/future dates or active overlap."
+            if excluded_sold else
+            "Validated sold comps from stronger sold sources first (HTML/Finding preferred, Browse last)."
+        )
     elif sold_candidates:
-        market_note = f"Sold candidates were found, but all {len(sold_candidates)} were excluded from pricing due to missing/future dates or active overlap."
+        market_note = (
+            f"Sold candidates were found from {', '.join(list(sold_source_breakdown.keys())[:3])}, but all {len(sold_candidates)} were excluded from pricing "
+            f"due to missing/future dates or active overlap."
+        )
     else:
         market_note = "No relevant recent eBay sold listings found."
 
@@ -1416,6 +1468,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
             "valid_count": len(sold_items),
             "excluded_count": len(excluded_sold),
             "excluded_reasons": _summarize_excluded_reasons(excluded_sold),
+            "source_breakdown": sold_source_breakdown,
         },
         "buy_price": buy_price if buy_price > 0 else 0,
         "store_tier": store_tier,
