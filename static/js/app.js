@@ -678,9 +678,7 @@ function renderAll(d) {
 
   var sumGrid = EL('div', 'gd', res);
   buildSummary(sumGrid, d);
-  buildTimePills(res);
   buildDataSource(res, d);
-  buildChart(res, d);
   buildConditions(res, d);
   buildSaturation(res, d);
   buildFlip(res, d);
@@ -711,10 +709,6 @@ function buildSummary(grid, d) {
   addStatCard(grid, '📊 Range (10th-90th)', '$' + FMT(s.p10 || s.low) + ' \u2013 $' + FMT(s.p90 || s.high), 'Min/Max $' + FMT(s.low) + ' / $' + FMT(s.high), '');
   var actCls = (a.median && s.median && a.median < s.median) ? 'g' : (a.median > s.median * 1.05 ? 'am' : '');
   addStatCard(grid, '🏷️ Active Market', '$' + (a.median ? FMT(a.median) : '--'), a.count + ' listed', actCls);
-  var dir = d.direction;
-  var dirVal = dir === 'rising' ? '\u2191 Rising' : (dir === 'falling' ? '\u2193 Falling' : '\u2192 Stable');
-  var dirCls = dir === 'rising' ? 'g' : (dir === 'falling' ? 'r' : 'am');
-  addStatCard(grid, '📈 Trend', dirVal, d.period.toUpperCase(), dirCls);
   var score = f.score || 0;
   var scCls = score >= 70 ? 'g' : (score >= 50 ? '' : (score >= 30 ? 'am' : 'r'));
   addStatCard(grid, '🔄 Flip Score', score + '/100', f.verdict || 'N/A', scCls);
@@ -724,14 +718,7 @@ function buildSummary(grid, d) {
 }
 
 function buildTimePills(res) {
-  var pl = EL('div', 'tpl', res);
-  for (var i = 0; i < PERIODS.length; i++) {
-    var p = PERIODS[i];
-    var el = EL('span', 'tp' + (p === period ? ' sl' : ''), pl);
-    TXT(el, p.toUpperCase());
-    el.dataset.p = p;
-    el.onclick = function() { period = this.dataset.p; search(); };
-  }
+  return;
 }
 
 function buildDataSource(res, d) {
@@ -784,33 +771,7 @@ function buildDataSource(res, d) {
 
 function buildChart(res, d) {
   if (chart) { chart.destroy(); chart = null; }
-  if (!d.trend || d.trend.length < 2) {
-    if (d.trend_status && d.trend_status.available === false) {
-      var nd = EL('div', 'cd', res);
-      EL('h3', '', nd).textContent = '📈 Price Trend';
-      var msg = EL('div', 'sb', nd);
-      msg.textContent = 'Not enough validated sold-date data to show a price trend.';
-    }
-    return;
-  }
-  var fc = d.active_filter_condition || '';
-  var cd = EL('div', 'cd', res);
-  EL('h3', '', cd).textContent = '📈 Price Trend' + (fc && fc !== 'all' ? ' — ' + CL(fc) : '');
-  var cw = EL('div', 'cw', cd);
-  var canvas = document.createElement('canvas');
-  cw.appendChild(canvas);
-  chart = new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: d.trend.map(function(t) { return t.date; }),
-      datasets: [
-        {label:'High', data:d.trend.map(function(t){return t.high}), borderColor:'rgba(248,113,113,.4)', borderWidth:1, pointRadius:0, fill:'+1', tension:.3},
-        {label:'Median', data:d.trend.map(function(t){return t.median}), borderColor:'#5b8def', borderWidth:2.5, pointRadius:0, fill:false, tension:.3},
-        {label:'Low', data:d.trend.map(function(t){return t.low}), borderColor:'rgba(52,211,153,.4)', borderWidth:1, pointRadius:0, fill:false, tension:.3}
-      ]
-    },
-    options: {responsive:true, maintainAspectRatio:false, interaction:{intersect:false, mode:'index'}, plugins:{legend:{position:'top', labels:{color:'#9aa0a6', usePointStyle:true, padding:16, font:{size:11}}}}, scales:{x:{ticks:{color:'#888', maxTicksLimit:8, font:{size:10}}}, y:{ticks:{color:'#888', font:{size:10}, callback:function(v){return'$'+v.toFixed(0)}}}}}
-  });
+  return;
 }
 
 function buildConditions(res, d) {
