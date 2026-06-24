@@ -509,6 +509,8 @@ def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], toda
     if active_overlap:
         reject_reasons.append('active_overlap')
 
+    reject_reasons.extend(_category_specific_mismatch_reasons(query, comp.get('title', '')))
+
     if source == 'eBay HTML':
         source_conf = 'high'
     elif source == 'eBay Finding API':
@@ -935,6 +937,102 @@ def _is_accessory_or_part_listing(title: str, query: str) -> bool:
 
     return False
 
+
+def _extract_requested_storage_gb(query: str) -> str:
+    m = re.search(r'(16|32|64|128|256|512|1024)\s*gb', (query or '').lower())
+    return m.group(1) if m else ''
+
+
+def _iphone_variant_key(text: str) -> str:
+    t = (text or '').lower()
+    if 'pro max' in t:
+        return 'pro max'
+    if re.search(r'pro', t):
+        return 'pro'
+    if re.search(r'plus', t):
+        return 'plus'
+    if re.search(r'mini', t):
+        return 'mini'
+    return 'base'
+
+
+def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
+    ql = (query or '').lower()
+    tl = (title or '').lower()
+    reasons = []
+    category = _detect_ebay_category(query)
+
+    if category == 'electronics' and 'iphone' in ql and 'iphone' in tl:
+        q_model = re.search(r'iphone\s+(\d{1,2})', ql)
+        t_model = re.search(r'iphone\s+(\d{1,2})', tl)
+        if q_model and t_model and q_model.group(1) != t_model.group(1):
+            reasons.append('wrong_phone_generation')
+        if _iphone_variant_key(ql) != _iphone_variant_key(tl):
+            reasons.append('wrong_phone_variant')
+        q_storage = _extract_requested_storage_gb(ql)
+        title_storages = set(re.findall(r'(16|32|64|128|256|512|1024)\s*gb', tl))
+        if q_storage and title_storages and q_storage not in title_storages:
+            reasons.append('wrong_storage')
+        if 'unlocked' in ql and 'locked' in tl and 'unlocked' not in tl:
+            reasons.append('locked_phone')
+
+    if category == 'video_games':
+        accessory_terms = [
+            'dock', 'docking station', 'joy-con', 'joycon', 'controller', 'charger dock',
+            'travel case', 'carrying case', 'case', 'shell', 'housing', 'thumb grip',
+            'thumb grips', 'sticker', 'button caps', 'buttons', 'strap', 'nitro deck',
+            'organizer', 'stand', 'wall mount'
+        ]
+        if any(term in tl for term in accessory_terms):
+            reasons.append('console_accessory')
+        if any(term in tl for term in ['bundle', 'lot', 'and extras', 'with extras', '4 games', 'games included']):
+            if 'bundle' not in ql and 'lot' not in ql:
+                reasons.append('console_bundle')
+        if any(term in tl for term in ['console only', 'tablet only']):
+            if 'console only' not in ql and 'tablet only' not in ql:
+                reasons.append('console_only_variant')
+
+    if category == 'tools':
+        if any(term in tl for term in ['chuck', 'switch label', 'tool case', 'case only', 'housing', 'gear shifter', 'gear selector']):
+            reasons.append('tool_part_or_case')
+
+    if category == 'trading_cards':
+        if any(term in tl for term in ['psa', 'bgs', 'cgc', 'sgc', 'graded', 'ace graded']):
+            if not any(term in ql for term in ['psa', 'bgs', 'cgc', 'sgc', 'graded']):
+                reasons.append('graded_card')
+        if 'base set' in ql and 'base set 2' in tl:
+            reasons.append('wrong_card_set')
+        if 'japanese' in tl and 'japanese' not in ql:
+            reasons.append('wrong_card_language')
+        if any(term in tl for term in ['celebrations', 'expedition', 'legendary collection']):
+            reasons.append('wrong_card_series')
+        if any(term in tl for term in ['lot', 'binder', 'collection', 'trio', 'complete set']):
+            if not any(term in ql for term in ['lot', 'binder', 'collection', 'set']):
+                reasons.append('card_lot_or_collection')
+
+    if category == 'books':
+        if any(term in ql for term in ['hardcover', 'hardback']) and 'paperback' in tl:
+            reasons.append('wrong_book_format')
+        if any(term in tl for term in ['casebook', 'study guide', 'student', 'cooking', 'entertaining guide', 'understanding the ']):
+            reasons.append('book_companion_or_guide')
+        if any(term in tl for term in ['set of', 'book set']) and 'set' not in ql:
+            reasons.append('book_set')
+
+    if category == 'sneakers':
+        if re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby)', tl):
+            if not re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby)', ql):
+                reasons.append('youth_shoe_variant')
+
+    # de-duplicate while preserving order
+    seen = set()
+    deduped = []
+    for reason in reasons:
+        if reason not in seen:
+            deduped.append(reason)
+            seen.add(reason)
+    return deduped
+
+
 def _is_relevant_listing(query: str, title: str) -> bool:
     """Return True only when a listing title appears to match the searched item.
 
@@ -944,6 +1042,8 @@ def _is_relevant_listing(query: str, title: str) -> bool:
     search itself asks for an accessory.
     """
     if _is_accessory_or_part_listing(title, query):
+        return False
+    if _category_specific_mismatch_reasons(query, title):
         return False
     if _requires_strict_phrase(query) and not _strict_phrase_match(query, title):
         return False
