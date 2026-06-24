@@ -85,6 +85,13 @@ EBAY_VERIFICATION_TOKEN = os.environ.get("EBAY_VERIFICATION_TOKEN", "pricespy-eb
 
 PRICE_CACHE: dict[str, dict] = {}
 SOLD_SOURCE_DEBUG: dict[str, dict] = {}
+APIFY_TOKEN = os.environ.get("APIFY_TOKEN", "").strip()
+APIFY_SOLD_ACTOR = os.environ.get("APIFY_SOLD_ACTOR", "caffein.dev/ebay-sold-listings").strip()
+APIFY_EBAY_SITE = os.environ.get("APIFY_EBAY_SITE", "ebay.com").strip()
+APIFY_SOLD_DAYS = int(os.environ.get("APIFY_SOLD_DAYS", "30") or 30)
+APIFY_SOLD_LIMIT = int(os.environ.get("APIFY_SOLD_LIMIT", "40") or 40)
+APIFY_TIMEOUT_SEC = int(os.environ.get("APIFY_TIMEOUT_SEC", "90") or 90)
+USE_APIFY_SOLD = os.environ.get("USE_APIFY_SOLD", "true").lower() == "true"
 SESSION = requests.Session()
 _adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
 SESSION.mount("http://", _adapter)
@@ -440,11 +447,146 @@ def _sold_debug_key(query: str, condition: str) -> str:
     return f"{(query or '').strip().lower()}|{(condition or 'all').strip().lower()}"
 
 
+def _apify_actor_path(actor_name: str) -> str:
+    actor_name = (actor_name or '').strip()
+    if not actor_name:
+        return ''
+    if '~' in actor_name:
+        return actor_name
+    if '/' in actor_name:
+        owner, name = actor_name.split('/', 1)
+        return f"{owner}~{name}"
+    return actor_name
+
+
+def _normalize_apify_condition(item: dict) -> str:
+    raw = (item.get('condition') or '').strip().lower()
+    if raw:
+        for alias, canonical in CONDITION_ALIASES.items():
+            if alias in raw:
+                return canonical
+    cond_id = str(item.get('conditionId') or '').strip()
+    for canonical, meta in EBAY_COND.items():
+        if meta.get('id') == cond_id:
+            return canonical
+    return _ebay_condition_to_canonical(raw)
+
+
+def _build_apify_sold_input(query: str, limit: int, condition: str = 'all') -> dict:
+    payload = {
+        'keywords': [query],
+        'count': max(1, min(limit, APIFY_SOLD_LIMIT)),
+        'daysToScrape': APIFY_SOLD_DAYS,
+        'ebaySite': APIFY_EBAY_SITE,
+    }
+    return payload
+
+
+def _fetch_apify_sold_listings(query: str, condition: str = 'all', limit: int = 40) -> tuple[list[dict], dict]:
+    debug = {
+        'provider': 'apify',
+        'provider_status': 'provider_not_configured',
+        'actor': APIFY_SOLD_ACTOR,
+        'request_input': _build_apify_sold_input(query, limit, condition),
+        'http_status': None,
+        'response_length': 0,
+        'items_returned': 0,
+        'normalized_items': 0,
+        'parse_notes': [],
+    }
+    if not USE_APIFY_SOLD:
+        return [], debug
+    if not APIFY_TOKEN or not APIFY_SOLD_ACTOR:
+        return [], debug
+
+    actor_path = _apify_actor_path(APIFY_SOLD_ACTOR)
+    url = f"https://api.apify.com/v2/acts/{actor_path}/run-sync-get-dataset-items"
+    headers = {
+        'Authorization': f'Bearer {APIFY_TOKEN}',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    }
+    params = {
+        'format': 'json',
+        'clean': 'true',
+    }
+    try:
+        r = SESSION.post(url, headers=headers, params=params, json=debug['request_input'], timeout=APIFY_TIMEOUT_SEC)
+        debug['http_status'] = r.status_code
+        debug['response_length'] = len(r.text or '')
+        if r.status_code != 200:
+            debug['provider_status'] = 'provider_http_error'
+            debug['parse_notes'].append((r.text or '')[:200])
+            return [], debug
+        try:
+            items = r.json()
+        except Exception as e:
+            debug['provider_status'] = 'provider_error'
+            debug['parse_notes'].append(f'json_decode_failed:{str(e)[:120]}')
+            return [], debug
+        if not isinstance(items, list):
+            debug['provider_status'] = 'provider_error'
+            debug['parse_notes'].append('non_list_response')
+            return [], debug
+        debug['items_returned'] = len(items)
+        normalized = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            sold_price = _clean_price(item.get('soldPrice'))
+            if not sold_price:
+                continue
+            item_id = str(item.get('itemId') or '').strip()
+            url_val = str(item.get('url') or '')
+            ended_at = str(item.get('endedAt') or '')
+            shipping = _clean_price(item.get('shippingPrice'))
+            total_price = _clean_price(item.get('totalPrice'))
+            normalized.append({
+                'title': str(item.get('title') or ''),
+                'price': sold_price,
+                'shipping': shipping or 0,
+                'total_price': total_price,
+                'sold_date': _safe_ymd(ended_at[:10]) or '',
+                'sold_date_raw': ended_at,
+                'condition': _normalize_apify_condition(item),
+                'url': url_val,
+                'item_id': item_id or _extract_item_id_from_url(url_val),
+                'source': 'Apify Sold Listings',
+                'listing_type': str(item.get('listingType') or ''),
+                'best_offer_accepted': bool(item.get('isBestOfferAccepted')),
+                'seller_username': str(item.get('sellerUsername') or ''),
+            })
+        debug['normalized_items'] = len(normalized)
+        debug['provider_status'] = 'provider_empty' if not normalized else 'provider_success'
+        return normalized, debug
+    except requests.Timeout:
+        debug['provider_status'] = 'provider_timeout'
+        return [], debug
+    except Exception as e:
+        debug['provider_status'] = 'provider_error'
+        debug['parse_notes'].append(str(e)[:200])
+        return [], debug
+
+
 def _derive_sold_source_status(debug: dict, raw_items: list[dict], relevant_items: list[dict], valid_items: list[dict]) -> str:
     if valid_items:
         return 'available'
     if not debug:
         return 'unknown'
+    provider_status = debug.get('provider_status')
+    if provider_status:
+        if provider_status == 'provider_not_configured':
+            return 'provider_not_configured'
+        if provider_status == 'provider_timeout':
+            return 'provider_timeout'
+        if provider_status == 'provider_http_error':
+            return 'provider_http_error'
+        if provider_status == 'provider_error':
+            return 'provider_error'
+        if provider_status == 'provider_empty':
+            return 'provider_empty'
+        if provider_status == 'provider_success' and relevant_items and not valid_items:
+            return 'excluded'
     if debug.get('http_status') and debug.get('http_status') != 200:
         return 'http_error'
     if debug.get('blocked_signals'):
@@ -463,6 +605,16 @@ def _derive_sold_source_status(debug: dict, raw_items: list[dict], relevant_item
 
 
 def _sold_source_status_note(status: str, debug: dict) -> str:
+    if status == 'provider_not_configured':
+        return 'Verified sold listings are unavailable because the Apify sold-data provider is not configured.'
+    if status == 'provider_timeout':
+        return 'Verified sold listings are unavailable because the Apify sold-data provider timed out.'
+    if status == 'provider_http_error':
+        return f"Verified sold listings are unavailable because the Apify sold-data provider returned HTTP {debug.get('http_status')}."
+    if status == 'provider_error':
+        return 'Verified sold listings are unavailable because the Apify sold-data provider returned an unusable response.'
+    if status == 'provider_empty':
+        return 'Verified sold listings are unavailable because the Apify sold-data provider returned no sold records for this query.'
     if status == 'blocked_or_error_page':
         return 'Verified sold listings are unavailable because eBay challenged or blocked server-side access from the hosting environment. Open eBay sold search manually or use a third-party scraping provider.'
     if status == 'http_error':
@@ -472,9 +624,9 @@ def _sold_source_status_note(status: str, debug: dict) -> str:
     if status == 'parsed_zero_items':
         return 'Verified sold listings are unavailable because the sold-search page loaded but no sold cards could be extracted.'
     if status == 'filtered_out':
-        return 'eBay sold-search results were found, but none matched this product cleanly after relevance filtering.'
+        return 'Sold listings were found from the provider, but none matched this product cleanly after relevance filtering.'
     if status == 'excluded':
-        return 'Sold-search results were found from eBay, but all were excluded from pricing due to missing/future dates, active overlap, or product mismatch.'
+        return 'Sold listings were found from the provider, but all were excluded from pricing due to missing/future dates, active overlap, or product mismatch.'
     if status == 'no_results':
         return 'Verified sold listings are unavailable because eBay sold search returned no results.'
     return 'Verified sold listings are unavailable right now. Use the eBay sold search link below to verify manually.'
@@ -570,6 +722,8 @@ def _validate_sold_item_basic(item: dict, query: str, active_ids: set[str], toda
 
     if comp.get('is_multi_variation'):
         warning_reasons.append('multi_variation_listing')
+    if comp.get('best_offer_accepted'):
+        warning_reasons.append('best_offer_price_may_be_asking_price')
 
     comp['item_id'] = item_id
     comp['sold_date'] = sold_date or ''
@@ -683,14 +837,14 @@ def _fetch_ebay_sold_finding(query: str, condition: str = "all", limit: int = 10
 
 
 def _ebay_sold_listings(query: str, condition: str = "all", limit: int = 100) -> list[dict]:
-    """Return only verified eBay sold-search results for user-facing sold comps.
+    """Return verified sold listings, preferring the Apify sold-data provider when configured."""
+    debug_key = _sold_debug_key(query, condition)
+    if USE_APIFY_SOLD and APIFY_TOKEN and APIFY_SOLD_ACTOR:
+        items, debug = _fetch_apify_sold_listings(query, condition, min(limit, APIFY_SOLD_LIMIT))
+        SOLD_SOURCE_DEBUG[debug_key] = debug
+        return items
 
-    We intentionally do NOT use Browse soldItemOnly or Finding completed results as
-    user-facing sold truth because those sources can still point at buyer-facing
-    View Item pages, multi-quantity/multi-variation listings, or records with weak
-    end-date semantics. For correctness, the app now treats the eBay sold/completed
-    search surface as the verified sold-listing source.
-    """
+    # Fallback to direct sold-search scraping only when the provider is not configured.
     return _scrape_ebay_sold_fallback(query, condition, min(limit, 60))
 
 
@@ -1559,7 +1713,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
 
     sold_candidates = _filter_by_relevance(sold_items_raw, q)
     sold_source_debug = SOLD_SOURCE_DEBUG.get(_sold_debug_key(q, filter_condition), {})
-    source_label = "eBay Sold Search"
+    source_label = "Apify Sold Listings" if (USE_APIFY_SOLD and APIFY_TOKEN and APIFY_SOLD_ACTOR) else "eBay Sold Search"
     if sold_items_raw and sold_items_raw[0].get("source"):
         source_label = sold_items_raw[0]["source"]
 
@@ -2008,6 +2162,8 @@ def api_status():
         "ebay_configured": bool(EBAY_CLIENT_ID and EBAY_CLIENT_SECRET),
         "gemini_configured": bool(GEMINI_API_KEY),
         "pricecharting_enabled": ENABLE_PRICECHARTING,
+        "apify_sold_enabled": bool(USE_APIFY_SOLD and APIFY_TOKEN and APIFY_SOLD_ACTOR),
+        "apify_sold_actor": APIFY_SOLD_ACTOR or None,
     })
 
 @app.route("/api/categories")
@@ -2839,8 +2995,7 @@ def api_photos():
         return jsonify({"error": "Query required"}), 400
     condition = request.args.get("condition", "all")
     limit = min(int(request.args.get("limit", "12") or 12), 24)
-    # Reuse sold-search scrape so photo/debug behavior matches the sold-listing source.
-    items = _scrape_ebay_sold_fallback(q, condition, max(limit, 24))
+    items = _ebay_sold_listings(q, condition, max(limit, 24))
     debug = SOLD_SOURCE_DEBUG.get(_sold_debug_key(q, condition), {})
     photos = []
     for it in items[:limit]:
