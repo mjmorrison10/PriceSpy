@@ -464,7 +464,7 @@ def _derive_sold_source_status(debug: dict, raw_items: list[dict], relevant_item
 
 def _sold_source_status_note(status: str, debug: dict) -> str:
     if status == 'blocked_or_error_page':
-        return 'Verified sold listings are unavailable because eBay returned an error or anti-bot style page to the server.'
+        return 'Verified sold listings are unavailable because eBay challenged or blocked server-side access from the hosting environment. Open eBay sold search manually or use a third-party scraping provider.'
     if status == 'http_error':
         return f"Verified sold listings are unavailable because eBay returned HTTP {debug.get('http_status')}."
     if status == 'selector_mismatch_or_empty_markup':
@@ -751,8 +751,14 @@ def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 
 
     text_blob_all = soup.get_text(" ", strip=True)[:5000]
     lower_blob = text_blob_all.lower()
-    if "something went wrong on our end" in lower_blob or debug["page_title"].lower().startswith("error page"):
+    final_url_lower = (debug.get("final_url") or "").lower()
+    page_title_lower = (debug.get("page_title") or "").lower()
+    if "something went wrong on our end" in lower_blob or page_title_lower.startswith("error page"):
         debug["blocked_signals"].append("ebay_error_page")
+    if "/splashui/challenge" in final_url_lower:
+        debug["blocked_signals"].append("challenge_redirect")
+    if "pardon our interruption" in page_title_lower:
+        debug["blocked_signals"].append("challenge_page_title")
     if "captcha" in lower_blob or "robot" in lower_blob or "verify yourself" in lower_blob or "security measure" in lower_blob:
         debug["blocked_signals"].append("anti_bot_or_captcha")
     if "no exact matches found" in lower_blob or "0 results for" in lower_blob:
