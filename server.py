@@ -84,6 +84,7 @@ ENABLE_PRICECHARTING = os.environ.get("ENABLE_PRICECHARTING", "true").lower() ==
 EBAY_VERIFICATION_TOKEN = os.environ.get("EBAY_VERIFICATION_TOKEN", "pricespy-ebay-notification-token-2024")
 
 PRICE_CACHE: dict[str, dict] = {}
+SOLD_SOURCE_DEBUG: dict[str, dict] = {}
 SESSION = requests.Session()
 _adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
 SESSION.mount("http://", _adapter)
@@ -435,6 +436,50 @@ def _build_sold_verification_url(query: str, title: str = '', item_id: str | Non
     )
 
 
+def _sold_debug_key(query: str, condition: str) -> str:
+    return f"{(query or '').strip().lower()}|{(condition or 'all').strip().lower()}"
+
+
+def _derive_sold_source_status(debug: dict, raw_items: list[dict], relevant_items: list[dict], valid_items: list[dict]) -> str:
+    if valid_items:
+        return 'available'
+    if not debug:
+        return 'unknown'
+    if debug.get('http_status') and debug.get('http_status') != 200:
+        return 'http_error'
+    if debug.get('blocked_signals'):
+        return 'blocked_or_error_page'
+    if debug.get('has_no_results_text'):
+        return 'no_results'
+    if raw_items and not relevant_items:
+        return 'filtered_out'
+    if relevant_items and not valid_items:
+        return 'excluded'
+    if debug.get('item_node_count', 0) == 0:
+        return 'selector_mismatch_or_empty_markup'
+    if debug.get('extracted_items', 0) == 0:
+        return 'parsed_zero_items'
+    return 'unavailable'
+
+
+def _sold_source_status_note(status: str, debug: dict) -> str:
+    if status == 'blocked_or_error_page':
+        return 'Verified sold listings are unavailable because eBay returned an error or anti-bot style page to the server.'
+    if status == 'http_error':
+        return f"Verified sold listings are unavailable because eBay returned HTTP {debug.get('http_status')}."
+    if status == 'selector_mismatch_or_empty_markup':
+        return 'Verified sold listings are unavailable because the sold-search page did not contain parseable listing markup.'
+    if status == 'parsed_zero_items':
+        return 'Verified sold listings are unavailable because the sold-search page loaded but no sold cards could be extracted.'
+    if status == 'filtered_out':
+        return 'eBay sold-search results were found, but none matched this product cleanly after relevance filtering.'
+    if status == 'excluded':
+        return 'Sold-search results were found from eBay, but all were excluded from pricing due to missing/future dates, active overlap, or product mismatch.'
+    if status == 'no_results':
+        return 'Verified sold listings are unavailable because eBay sold search returned no results.'
+    return 'Verified sold listings are unavailable right now. Use the eBay sold search link below to verify manually.'
+
+
 def _sold_source_merge_priority(item: dict) -> tuple:
     source = item.get('source', '')
     source_rank = {
@@ -654,15 +699,65 @@ def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 
     u = f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(query)}&LH_Sold=1&LH_Complete=1&_ipg=60"
     if condition and condition != "all" and condition in EBAY_COND:
         u += f"&LH_ItemCondition={EBAY_COND[condition]['id']}"
+
+    debug = {
+        "query": query,
+        "condition": condition,
+        "request_url": u,
+        "final_url": u,
+        "http_status": None,
+        "page_title": "",
+        "response_length": 0,
+        "item_node_count": 0,
+        "pl_bottom_node_count": 0,
+        "title_node_count": 0,
+        "price_node_count": 0,
+        "link_node_count": 0,
+        "extracted_items": 0,
+        "skipped_missing_core": 0,
+        "skipped_duplicates": 0,
+        "skipped_shop_or_sponsored": 0,
+        "skipped_bad_price": 0,
+        "has_no_results_text": False,
+        "blocked_signals": [],
+        "parse_notes": [],
+    }
+
     try:
         r = SESSION.get(u, timeout=15)
+        debug["http_status"] = r.status_code
+        debug["final_url"] = r.url
+        debug["response_length"] = len(r.text or "")
         if r.status_code != 200:
+            debug["blocked_signals"].append("non_200_status")
+            SOLD_SOURCE_DEBUG[_sold_debug_key(query, condition)] = debug
             print(f"eBay sold search scrape error: {r.status_code}")
             return []
     except Exception as e:
+        debug["blocked_signals"].append("request_exception")
+        debug["parse_notes"].append(str(e)[:200])
+        SOLD_SOURCE_DEBUG[_sold_debug_key(query, condition)] = debug
         print(f"eBay sold search scrape request failed: {e}")
         return []
+
     soup = BeautifulSoup(r.text, "html.parser")
+    title_tag = soup.select_one('title')
+    debug["page_title"] = title_tag.get_text(" ", strip=True)[:200] if title_tag else ""
+    debug["item_node_count"] = len(soup.select("li.s-item"))
+    debug["pl_bottom_node_count"] = len(soup.select("li.s-item.s-item__pl-on-bottom"))
+    debug["title_node_count"] = len(soup.select(".s-item__title"))
+    debug["price_node_count"] = len(soup.select(".s-item__price"))
+    debug["link_node_count"] = len(soup.select("a.s-item__link"))
+
+    text_blob_all = soup.get_text(" ", strip=True)[:5000]
+    lower_blob = text_blob_all.lower()
+    if "something went wrong on our end" in lower_blob or debug["page_title"].lower().startswith("error page"):
+        debug["blocked_signals"].append("ebay_error_page")
+    if "captcha" in lower_blob or "robot" in lower_blob or "verify yourself" in lower_blob or "security measure" in lower_blob:
+        debug["blocked_signals"].append("anti_bot_or_captcha")
+    if "no exact matches found" in lower_blob or "0 results for" in lower_blob:
+        debug["has_no_results_text"] = True
+
     items = []
     seen = set()
     for li in soup.select("li.s-item"):
@@ -675,12 +770,18 @@ def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 
             url = link_el.get("href", "") if link_el else ""
             item_id = _extract_item_id_from_url(url)
             key = item_id or (title + '|' + price_text)
-            if not title or not price_text or key in seen:
+            if not title or not price_text:
+                debug["skipped_missing_core"] += 1
+                continue
+            if key in seen:
+                debug["skipped_duplicates"] += 1
                 continue
             if "shop on ebay" in title.lower() or "sponsored" in title.lower():
+                debug["skipped_shop_or_sponsored"] += 1
                 continue
             price = _clean_price(price_text)
             if not price or price <= 0.01:
+                debug["skipped_bad_price"] += 1
                 continue
 
             sold_date = None
@@ -709,6 +810,13 @@ def _scrape_ebay_sold_fallback(query: str, condition: str = "all", limit: int = 
                 break
         except Exception:
             continue
+
+    debug["extracted_items"] = len(items)
+    if debug["item_node_count"] == 0 and not debug["has_no_results_text"] and not debug["blocked_signals"]:
+        debug["parse_notes"].append("selector_mismatch_or_empty_markup")
+    if debug["item_node_count"] > 0 and len(items) == 0 and not debug["blocked_signals"]:
+        debug["parse_notes"].append("selector_matched_nodes_but_no_items_extracted")
+    SOLD_SOURCE_DEBUG[_sold_debug_key(query, condition)] = debug
     print(f"eBay sold search scrape returned {len(items)} items for '{query}'")
     return items
 
@@ -1444,6 +1552,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         active_items_raw = future_active.result()
 
     sold_candidates = _filter_by_relevance(sold_items_raw, q)
+    sold_source_debug = SOLD_SOURCE_DEBUG.get(_sold_debug_key(q, filter_condition), {})
     source_label = "eBay Sold Search"
     if sold_items_raw and sold_items_raw[0].get("source"):
         source_label = sold_items_raw[0]["source"]
@@ -1460,7 +1569,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
     primary_source = next(iter(sold_source_breakdown.keys()), source_label)
     data_source = f"Verified sold listings ({len(sold_items)} validated of {len(sold_candidates)} relevant items via {primary_source or source_label})"
     confidence = "high" if len(sold_items) >= 5 else "medium" if len(sold_items) > 0 else "low"
-    sold_source_status = "available" if sold_candidates else "unavailable"
+    sold_source_status = _derive_sold_source_status(sold_source_debug, sold_items_raw, sold_candidates, sold_items)
     if sold_items:
         market_note = (
             f"Verified sold listings are sourced only from eBay's sold/completed search surface. "
@@ -1468,13 +1577,8 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
             if excluded_sold else
             "Verified sold listings are sourced only from eBay's sold/completed search surface."
         )
-    elif sold_candidates:
-        market_note = (
-            f"Sold-search results were found from eBay, but all {len(sold_candidates)} were excluded from pricing "
-            f"due to missing/future dates, active overlap, or product mismatch."
-        )
     else:
-        market_note = "Verified sold listings are unavailable right now. Use the eBay sold search link below to verify manually."
+        market_note = _sold_source_status_note(sold_source_status, sold_source_debug)
 
     # Filter
     sold_filtered = _filter_by_condition(sold_items, filter_condition)
@@ -1545,6 +1649,7 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         "active_listings": active_filtered,
         "data_source": data_source,
         "sold_source_status": sold_source_status,
+        "sold_source_debug": sold_source_debug,
         "confidence": confidence,
         "confidence_label": {
             "high": "✅ High confidence — real eBay sales",
@@ -2728,36 +2833,24 @@ def api_photos():
         return jsonify({"error": "Query required"}), 400
     condition = request.args.get("condition", "all")
     limit = min(int(request.args.get("limit", "12") or 12), 24)
-    u = f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1&LH_Complete=1&_ipg=60"
-    if condition and condition != "all" and condition in EBAY_COND:
-        u += f"&LH_ItemCondition={EBAY_COND[condition]['id']}"
-    try:
-        r = SESSION.get(u, timeout=15)
-        if r.status_code != 200:
-            return jsonify({"photos": [], "error": "Could not fetch eBay"})
-    except Exception:
-        return jsonify({"photos": [], "error": "eBay unavailable"})
-    soup = BeautifulSoup(r.text, "html.parser")
+    # Reuse sold-search scrape so photo/debug behavior matches the sold-listing source.
+    items = _scrape_ebay_sold_fallback(q, condition, max(limit, 24))
+    debug = SOLD_SOURCE_DEBUG.get(_sold_debug_key(q, condition), {})
     photos = []
-    for li in soup.select("li.s-item.s-item__pl-on-bottom")[:limit * 2]:
-        img_el = li.select_one(".s-item__image-img img, .s-item__image img")
-        link_el = li.select_one("a.s-item__link")
-        title_el = li.select_one(".s-item__title")
-        price_el = li.select_one(".s-item__price")
-        img_url = img_el.get("src") or img_el.get("data-src") if img_el else ""
-        title = title_el.get_text(" ", strip=True) if title_el else ""
-        price = _clean_price(price_el.get_text(" ", strip=True)) if price_el else None
-        link = link_el.get("href", "") if link_el else ""
-        if not title or "shop on ebay" in title.lower():
-            continue
-        if img_url and link:
-            photos.append({
-                "title": title[:100], "price": round(price, 2) if price else None,
-                "image": img_url, "url": link,
-            })
-        if len(photos) >= limit:
-            break
-    return jsonify({"query": q, "condition": condition, "photos": photos, "ebay_url": u})
+    for it in items[:limit]:
+        photos.append({
+            "title": (it.get("title") or "")[:100],
+            "price": round(it.get("price"), 2) if it.get("price") else None,
+            "image": "",
+            "url": it.get("url", ""),
+        })
+    return jsonify({
+        "query": q,
+        "condition": condition,
+        "photos": photos,
+        "ebay_url": f"https://www.ebay.com/sch/i.html?_nkw={urllib.parse.quote_plus(q)}&LH_Sold=1&LH_Complete=1&_ipg=60",
+        "debug": debug,
+    })
 
 # ── eBay Seller OAuth ───────────────────────────────────────────────────
 EBAY_REDIRECT_URI = os.environ.get("EBAY_REDIRECT_URI", "https://pricespy-yx00.onrender.com/api/ebay/callback")
