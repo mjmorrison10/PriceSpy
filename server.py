@@ -514,7 +514,7 @@ def _fetch_apify_sold_listings(query: str, condition: str = 'all', limit: int = 
         r = SESSION.post(url, headers=headers, params=params, json=debug['request_input'], timeout=APIFY_TIMEOUT_SEC)
         debug['http_status'] = r.status_code
         debug['response_length'] = len(r.text or '')
-        if r.status_code != 200:
+        if r.status_code not in (200, 201):
             debug['provider_status'] = 'provider_http_error'
             debug['parse_notes'].append((r.text or '')[:200])
             return [], debug
