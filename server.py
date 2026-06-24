@@ -153,6 +153,7 @@ EBAY_CATEGORY_FVF = {
     "trading_cards": 13.25,
     "fashion": 13.25,
     "toys": 13.25,
+    "tools": 13.25,
     "vehicles": 13.25,
     "home": 13.25,
     "health": 13.25,
@@ -309,18 +310,22 @@ def _detect_ebay_category(query: str, category_id: str = "") -> str:
         return "books"
     if any(k in q for k in ["guitar", "fender", "gibson", "drum", "keyboard", "piano", "amplifier", "amp"]):
         return "musical_instruments"
-    if any(k in q for k in ["pokemon", "trading card", "mtg", "magic the gathering", "yugioh", "sports card"]):
+    if any(k in q for k in ["pokemon", "trading card", "mtg", "magic the gathering", "yugioh", "sports card", "charizard", "base set", "wotc", "psa ", " psa", "cgc ", " bgs "]):
         return "trading_cards"
-    if any(k in q for k in ["nintendo", "playstation", "xbox", "game", "console", "gameboy", "gamecube"]):
+    if any(k in q for k in ["nintendo", "playstation", "xbox", "game", "console", "gameboy", "gamecube", "switch oled"]):
         return "video_games"
     if any(k in q for k in ["iphone", "samsung", "pixel", "macbook", "laptop", "camera", "headphone", "tablet", "phone"]):
         return "electronics"
+    if any(k in q for k in ["dewalt", "milwaukee", "makita", "drill", "impact driver", "impact wrench", "sawzall", "circular saw", "reciprocating saw", "tool only", "cordless tool"]):
+        return "tools"
     if any(k in q for k in ["car", "truck", "motorcycle", "suv", "vehicle", "toyota", "ford", "honda", "harley"]):
         return "vehicles"
     if any(k in q for k in ["lego", "toy", "action figure", "doll", "plush"]):
         return "toys"
     if any(k in q for k in ["shirt", "jacket", "pants", "dress", "bag", "wallet", "purse", "clothing"]):
         return "fashion"
+    if any(k in q for k in ["hardcover", "hardback", "paperback", "novel", "book club", "scribner", "gatsby"]):
+        return "books"
     return "default"
 
 def _ebay_category_fvf(category_id: str) -> float:
@@ -1236,13 +1241,34 @@ def _iphone_variant_key(text: str) -> str:
     return 'base'
 
 
+def _extract_model_codes(text: str) -> list[str]:
+    return sorted(set(re.findall(r'[A-Z]{2,5}\d{3,5}[A-Z]?', (text or '').upper())))
+
+
+def _query_allows_damage(query: str) -> bool:
+    q = (query or '').lower()
+    return any(term in q for term in ['for parts', 'broken', 'cracked', 'damaged', 'bad lcd', 'as is', 'as-is', 'repair'])
+
+
+def _query_targets_youth_shoes(query: str) -> bool:
+    q = (query or '').lower()
+    return bool(re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby|td|ps)', q))
+
+
 def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
     ql = (query or '').lower()
     tl = (title or '').lower()
     reasons = []
     category = _detect_ebay_category(query)
 
-    if category == 'electronics' and 'iphone' in ql and 'iphone' in tl:
+    is_phone_query = 'iphone' in ql
+    is_console_query = category == 'video_games' or ('switch' in ql and 'oled' in ql)
+    is_tool_query = category == 'tools' or any(term in ql for term in ['dewalt', 'milwaukee', 'makita', 'dcd791', 'drill'])
+    is_card_query = category == 'trading_cards' or any(term in ql for term in ['charizard', 'pokemon', 'base set', 'wotc', 'psa', 'cgc', 'bgs'])
+    is_book_query = category == 'books' or 'great gatsby' in ql or any(term in ql for term in ['hardcover', 'hardback', 'paperback'])
+    is_shoe_query = category == 'sneakers' or any(term in ql for term in ['nike dunk', 'panda', 'jordan', 'yeezy'])
+
+    if is_phone_query and 'iphone' in tl:
         q_model = re.search(r'iphone\s+(\d{1,2})', ql)
         t_model = re.search(r'iphone\s+(\d{1,2})', tl)
         if q_model and t_model and q_model.group(1) != t_model.group(1):
@@ -1253,10 +1279,15 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
         title_storages = set(re.findall(r'(16|32|64|128|256|512|1024)\s*gb', tl))
         if q_storage and title_storages and q_storage not in title_storages:
             reasons.append('wrong_storage')
-        if 'unlocked' in ql and 'locked' in tl and 'unlocked' not in tl:
+        if q_storage and len(title_storages) > 1:
+            reasons.append('ambiguous_multi_storage_listing')
+        carrier_terms = ['verizon', 'at&t', 'att', 't-mobile', 'tmobile', 'sprint', 'boost mobile', 'cricket']
+        if 'unlocked' in ql and any(term in tl for term in carrier_terms) and 'unlocked' not in tl and 'factory unlocked' not in tl:
             reasons.append('locked_phone')
+        if not _query_allows_damage(query) and any(term in tl for term in ['bad lcd', 'sold as is', 'as is', 'as-is', 'cracked', 'broken', 'for parts', 'bad esn', 'icloud', 'read']):
+            reasons.append('damaged_phone_listing')
 
-    if category == 'video_games':
+    if is_console_query:
         accessory_terms = [
             'dock', 'docking station', 'joy-con', 'joycon', 'controller', 'charger dock',
             'travel case', 'carrying case', 'case', 'shell', 'housing', 'thumb grip',
@@ -1271,12 +1302,24 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
         if any(term in tl for term in ['console only', 'tablet only']):
             if 'console only' not in ql and 'tablet only' not in ql:
                 reasons.append('console_only_variant')
+        if any(term in tl for term in ['special edition', 'splatoon', 'pokemon scarlet', 'scarlet & violet', 'tears of the kingdom', 'zelda edition']):
+            if all(term not in ql for term in ['special edition', 'splatoon', 'pokemon', 'scarlet', 'violet', 'zelda', 'tears of the kingdom']):
+                reasons.append('special_edition_console')
 
-    if category == 'tools':
-        if any(term in tl for term in ['chuck', 'switch label', 'tool case', 'case only', 'housing', 'gear shifter', 'gear selector']):
+    if is_tool_query:
+        if any(term in tl for term in ['chuck', 'switch label', 'tool case', 'case only', 'housing', 'gear shifter', 'gear selector', 'transmission', 'button']):
             reasons.append('tool_part_or_case')
+        q_models = _extract_model_codes(query)
+        t_models = _extract_model_codes(title)
+        if q_models:
+            if t_models and q_models[0] not in t_models:
+                reasons.append('wrong_tool_model')
+            elif len([m for m in t_models if m != q_models[0]]) >= 1 and 'bundle' not in ql and 'kit' not in ql and 'combo' not in ql:
+                reasons.append('multi_model_tool_listing')
+        if any(term in tl for term in ['combo kit', '2-tool', '3-tool', 'with worklight', 'worklight']) and not any(term in ql for term in ['kit', 'combo', 'worklight']):
+            reasons.append('tool_bundle_listing')
 
-    if category == 'trading_cards':
+    if is_card_query:
         if any(term in tl for term in ['psa', 'bgs', 'cgc', 'sgc', 'graded', 'ace graded']):
             if not any(term in ql for term in ['psa', 'bgs', 'cgc', 'sgc', 'graded']):
                 reasons.append('graded_card')
@@ -1284,26 +1327,34 @@ def _category_specific_mismatch_reasons(query: str, title: str) -> list[str]:
             reasons.append('wrong_card_set')
         if 'japanese' in tl and 'japanese' not in ql:
             reasons.append('wrong_card_language')
-        if any(term in tl for term in ['celebrations', 'expedition', 'legendary collection']):
-            reasons.append('wrong_card_series')
+        if any(term in tl for term in ['celebrations', 'expedition', 'legendary collection', 'reverse holo', 'non holo']):
+            if all(term not in ql for term in ['celebrations', 'expedition', 'legendary collection', 'reverse holo', 'non holo']):
+                reasons.append('wrong_card_series')
         if any(term in tl for term in ['lot', 'binder', 'collection', 'trio', 'complete set']):
             if not any(term in ql for term in ['lot', 'binder', 'collection', 'set']):
                 reasons.append('card_lot_or_collection')
+        if 'charizard' in ql and any(term in tl for term in ['venusaur', 'blastoise', 'mewtwo']) and 'charizard' in tl:
+            reasons.append('multi_card_subject_listing')
 
-    if category == 'books':
+    if is_book_query:
+        if 'great gatsby' in ql and 'great gatsby' not in tl:
+            reasons.append('wrong_book_title')
         if any(term in ql for term in ['hardcover', 'hardback']) and 'paperback' in tl:
             reasons.append('wrong_book_format')
-        if any(term in tl for term in ['casebook', 'study guide', 'student', 'cooking', 'entertaining guide', 'understanding the ']):
-            reasons.append('book_companion_or_guide')
+        if 'paperback' in ql and any(term in tl for term in ['hardcover', 'hardback']):
+            reasons.append('wrong_book_format')
+        if any(term in tl for term in ['casebook', 'study guide', 'student', 'cooking', 'entertaining guide', 'understanding the ', 'and other works', 'trimalchio']):
+            reasons.append('book_companion_or_variant')
         if any(term in tl for term in ['set of', 'book set']) and 'set' not in ql:
             reasons.append('book_set')
 
-    if category == 'sneakers':
-        if re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby)', tl):
-            if not re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby)', ql):
+    if is_shoe_query:
+        if re.search(r'(gs|grade school|youth|toddler|preschool|infant|baby|td|ps)', tl):
+            if not _query_targets_youth_shoes(query):
                 reasons.append('youth_shoe_variant')
+        if any(term in tl for term in ['women', 'womens', 'women’s', 'wmns']) and not any(term in ql for term in ['women', 'womens', 'women’s', 'wmns']):
+            reasons.append('gender_specific_shoe_variant')
 
-    # de-duplicate while preserving order
     seen = set()
     deduped = []
     for reason in reasons:
