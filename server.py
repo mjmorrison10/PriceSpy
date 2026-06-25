@@ -1461,6 +1461,74 @@ def _extract_product_name_from_titles(items: list[dict], query: str) -> str:
         best = re.sub(f"(?i)\\b{junk}\\b", "", best).strip()
     return best.strip(" -,/|") or titles[0]
 
+def _extract_title_storage_values(title: str) -> set[str]:
+    return set(re.findall(r'(16|32|64|128|256|512|1024)\s*gb', (title or '').lower()))
+
+
+def _title_has_ambiguous_storage_menu(title: str) -> bool:
+    tl = (title or '').lower()
+    if len(_extract_title_storage_values(tl)) > 1:
+        return True
+    if re.search(r'(16|32|64|128|256|512|1024)\s*/\s*(16|32|64|128|256|512|1024)', tl):
+        return True
+    if re.search(r'128gb\s+256gb|128gb\s+256gb\s+512gb|128/256/512', tl):
+        return True
+    if any(term in tl for term in ['choose storage', 'select storage', '128/256', '256/512', 'all colors choose', 'choose color carrier']):
+        return True
+    return False
+
+
+def _apply_market_segment_post_filter(items: list[dict], query: str, market_segment: str = 'auto') -> list[dict]:
+    seg = _normalize_market_segment(market_segment)
+    ql = (query or '').lower()
+    if not items:
+        return []
+
+    # Phone precision cleanup only — the other market segments are already handled
+    # by title mismatch rules; phones still benefit from a stricter post-filter.
+    if 'iphone' not in ql:
+        return items
+
+    q_model = re.search(r'iphone\s+(\d{1,2})', ql)
+    q_variant = _iphone_variant_key(ql)
+    q_storage = _extract_requested_storage_gb(ql)
+    carrier_terms = ['verizon', 'at&t', 'att', 't-mobile', 'tmobile', 'sprint', 'boost mobile', 'cricket']
+    strict_storage = seg in ['auto', 'strict', 'phone_exact_storage']
+
+    filtered = []
+    for it in items:
+        title = it.get('title', '')
+        tl = title.lower()
+        if 'iphone' not in tl:
+            continue
+        t_model = re.search(r'iphone\s+(\d{1,2})', tl)
+        if q_model and t_model and q_model.group(1) != t_model.group(1):
+            continue
+        if _iphone_variant_key(tl) != q_variant:
+            continue
+        if 'unlocked' in ql:
+            if not ('unlocked' in tl or 'factory unlocked' in tl or 'sim free' in tl):
+                if any(term in tl for term in carrier_terms):
+                    continue
+        if seg != 'phone_allow_damaged' and not _query_allows_damage(query):
+            if any(term in tl for term in ['bad lcd', 'sold as is', 'as is', 'as-is', 'cracked', 'broken', 'for parts', 'bad esn', 'icloud', 'read']):
+                continue
+        if q_storage:
+            storages = _extract_title_storage_values(tl)
+            ambiguous = _title_has_ambiguous_storage_menu(tl)
+            if seg == 'phone_any_storage' or seg == 'broad':
+                pass
+            else:
+                if ambiguous:
+                    continue
+                if storages and q_storage not in storages:
+                    continue
+                if seg == 'phone_exact_storage' and (not storages or q_storage not in storages):
+                    continue
+        filtered.append(it)
+    return filtered
+
+
 def _filter_by_relevance(items: list[dict], query: str, market_segment: str = 'auto') -> list[dict]:
     """Filter eBay/market listings down to titles relevant to the query."""
     if _is_barcode_query(query):
@@ -1814,14 +1882,14 @@ def _do_search(q: str, period_days: int, period: str, filter_condition: str,
         sold_items_raw = future_sold.result()
         active_items_raw = future_active.result()
 
-    sold_candidates = _filter_by_relevance(sold_items_raw, q, market_segment)
+    sold_candidates = _apply_market_segment_post_filter(_filter_by_relevance(sold_items_raw, q, market_segment), q, market_segment)
     sold_source_debug = SOLD_SOURCE_DEBUG.get(_sold_debug_key(q, filter_condition), {})
     source_label = "Apify Sold Listings" if (USE_APIFY_SOLD and APIFY_TOKEN and APIFY_SOLD_ACTOR) else "eBay Sold Search"
     if sold_items_raw and sold_items_raw[0].get("source"):
         source_label = sold_items_raw[0]["source"]
 
     # 2. Real eBay active listings (already fetched in parallel)
-    active_items = _filter_by_relevance(active_items_raw, q, market_segment)
+    active_items = _apply_market_segment_post_filter(_filter_by_relevance(active_items_raw, q, market_segment), q, market_segment)
     active_ids = {_extract_item_id_from_url(it.get("url", "")) for it in active_items if _extract_item_id_from_url(it.get("url", ""))}
 
     sold_candidates = [_validate_sold_item_basic(it, q, active_ids, today_ymd, market_segment) for it in sold_candidates]
