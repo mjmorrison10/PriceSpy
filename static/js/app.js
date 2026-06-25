@@ -70,6 +70,43 @@ var MARKET_SEGMENT_HELP = {
 
 function segLabel(v) { return MARKET_SEGMENT_HELP[v] || MARKET_SEGMENT_HELP.auto; }
 
+var SOLD_STATUS_HELP = {
+  available:{label:'Verified sold listings available', tone:'ok'},
+  provider_not_configured:{label:'Sold provider not configured', tone:'warn'},
+  provider_timeout:{label:'Sold provider timed out', tone:'warn'},
+  provider_http_error:{label:'Sold provider HTTP error', tone:'warn'},
+  provider_error:{label:'Sold provider response error', tone:'warn'},
+  provider_empty:{label:'Provider returned no sold records', tone:'warn'},
+  blocked_or_error_page:{label:'eBay blocked direct sold scraping', tone:'warn'},
+  no_results:{label:'No sold results from source', tone:'warn'},
+  filtered_out:{label:'Sold results filtered out', tone:'warn'},
+  excluded:{label:'Sold results excluded', tone:'warn'},
+  unavailable:{label:'Sold listings unavailable', tone:'warn'},
+  unknown:{label:'Sold source unknown', tone:'warn'}
+};
+
+function soldStatusLabel(v) { return (SOLD_STATUS_HELP[v] || SOLD_STATUS_HELP.unknown).label; }
+function soldStatusTone(v) { return (SOLD_STATUS_HELP[v] || SOLD_STATUS_HELP.unknown).tone; }
+function warningLabel(reason) {
+  var map = {
+    best_offer_price_may_be_asking_price:'Best offer',
+    active_overlap:'Active overlap',
+    damaged_phone_listing:'Damaged',
+    ambiguous_multi_storage_listing:'Mixed storage',
+    graded_card:'Graded',
+    youth_shoe_variant:'Youth',
+    gender_specific_shoe_variant:'Women\'s',
+    tool_bundle_listing:'Kit / bundle',
+    special_edition_console:'Special edition',
+    collectible_book_variant:'Collectible',
+  };
+  return map[reason] || String(reason || '').replace(/_/g,' ');
+}
+
+function statusBadge(cls, text) {
+  return '<span class="mini-chip ' + cls + '">' + text + '</span>';
+}
+
 // Theme
 if (localStorage.getItem('ps-thm') === 'light') {
   document.documentElement.setAttribute('data-theme','light');
@@ -735,7 +772,7 @@ function buildSummary(grid, d) {
   var p = f.potential_profit || 0;
   var pc = f.potential_profit_pct || 0;
 
-  addStatCard(grid, '💰 Median Sold' + flt, '$' + FMT(s.median), s.count + ' sold', '');
+  addStatCard(grid, '💰 Median Sold' + flt, s.count ? '$' + FMT(s.median) : '--', s.count ? (s.count + ' sold') : 'No verified solds', '');
   addStatCard(grid, '📊 Range (10th-90th)', '$' + FMT(s.p10 || s.low) + ' \u2013 $' + FMT(s.p90 || s.high), 'Min/Max $' + FMT(s.low) + ' / $' + FMT(s.high), '');
   var actCls = (a.median && s.median && a.median < s.median) ? 'g' : (a.median > s.median * 1.05 ? 'am' : '');
   addStatCard(grid, '🏷️ Active Market', '$' + (a.median ? FMT(a.median) : '--'), a.count + ' listed', actCls);
@@ -761,6 +798,11 @@ function buildDataSource(res, d) {
   var confSpan = EL('span', '', dr);
   confSpan.style.cssText = 'font-size:.65rem;color:var(--t2);margin-left:6px';
   confSpan.textContent = d.confidence_label || '';
+  if (d.sold_source_status) {
+    var st = EL('span', 'mini-chip ' + (soldStatusTone(d.sold_source_status) === 'ok' ? 'ok' : 'warn'), dr);
+    st.style.marginLeft = '8px';
+    st.textContent = soldStatusLabel(d.sold_source_status);
+  }
   if (d.ebay_url) {
     var verifyLink = EL('a', '', dr);
     verifyLink.href = d.ebay_url; verifyLink.target = '_blank'; verifyLink.rel = 'noopener noreferrer';
@@ -775,7 +817,7 @@ function buildDataSource(res, d) {
   if (d.market_segment && d.market_segment !== 'auto') {
     var segDiv = EL('div', '', dr);
     segDiv.style.cssText = 'font-size:.65rem;color:var(--t2);margin-top:6px';
-    segDiv.textContent = 'Market segment: ' + segLabel(d.market_segment);
+    segDiv.innerHTML = 'Market segment: ' + statusBadge('info', segLabel(d.market_segment));
   }
   if (d.sold_validation_summary) {
     var sv = d.sold_validation_summary;
@@ -929,7 +971,7 @@ function buildListings(res, d) {
   if (d.recent_sold && d.recent_sold.length) {
     var sCount = EL('div', 'lcount', res);
     var excludedCount = d.sold_validation_summary ? (d.sold_validation_summary.excluded_count || 0) : 0;
-    TXT(sCount, d.recent_sold.length + ' validated sold comps used in the average.' + (excludedCount ? ' ' + excludedCount + ' sold candidates were excluded from pricing.' : '') + ' Click a row to verify on eBay sold search; click ❌ to remove a comp manually.');
+    TXT(sCount, d.recent_sold.length + ' verified sold listings used in the average.' + (excludedCount ? ' ' + excludedCount + ' sold candidates were excluded from pricing.' : '') + ' Click a row to verify on eBay sold search; click ❌ to remove a comp manually.');
     var sBox = EL('div', 'lscroll', res);
     for (var i = 0; i < d.recent_sold.length; i++) {
       var it = d.recent_sold[i];
@@ -945,7 +987,16 @@ function buildListings(res, d) {
       var ip = EL('span', 'ip', row); TXT(ip, '$' + FMT(it.price));
       var src = EL('span', 'id', row);
       src.style.marginLeft = '6px';
-      TXT(src, it.source === 'eBay Sold Search' ? 'Sold Search' : (it.source === 'eBay Finding API' ? 'Finding' : (it.source === 'eBay Browse API' ? 'Browse' : (it.source || ''))));
+      TXT(src, it.source === 'eBay Sold Search' ? 'Sold Search' : (it.source === 'Apify Sold Listings' ? 'Apify' : (it.source === 'eBay Finding API' ? 'Finding' : (it.source === 'eBay Browse API' ? 'Browse' : (it.source || '')))));
+      if (it.warning_reasons && it.warning_reasons.length) {
+        var warnWrap = EL('span', '', row);
+        warnWrap.style.display = 'inline-flex';
+        warnWrap.style.gap = '4px';
+        for (var w = 0; w < Math.min(it.warning_reasons.length, 2); w++) {
+          var wb = EL('span', 'mini-chip warn', warnWrap);
+          wb.textContent = warningLabel(it.warning_reasons[w]);
+        }
+      }
       if (it.url) {
         var raw = EL('a', '', row);
         raw.href = it.url;
@@ -960,11 +1011,18 @@ function buildListings(res, d) {
   } else {
     var emp = EL('div', '', res);
     emp.style.cssText = 'text-align:center;padding:30px;color:var(--t2);font-size:.82rem';
-    TXT(emp, 'No validated eBay sold comps available.');
+    TXT(emp, 'No verified sold listings available in-app.');
+    var soldEmpty = EL('div', '', res);
+    soldEmpty.style.cssText = 'text-align:center;padding:0 20px 16px;color:var(--t2);font-size:.78rem';
+    soldEmpty.textContent = soldStatusLabel(d.sold_source_status) + '. Use the eBay Sold Search link to verify manually, or switch market segment / source mode.';
+    var soldActions = EL('div', 'rw', res);
+    soldActions.style.cssText = 'justify-content:center;margin-bottom:16px';
+    var soldBtn = EL('a', 'bt bt-p', soldActions);
+    soldBtn.href = d.ebay_url || '#'; soldBtn.target = '_blank'; soldBtn.rel = 'noopener noreferrer'; soldBtn.textContent = '🔗 Open eBay Sold Search'; soldBtn.style.textDecoration='none';
     if (d.sold_validation_summary && d.sold_validation_summary.excluded_count) {
       var sub = EL('div', '', res);
       sub.style.cssText = 'text-align:center;padding:0 20px 24px;color:var(--am);font-size:.76rem';
-      TXT(sub, d.sold_validation_summary.excluded_count + ' sold candidates were excluded from pricing because they had missing/future sold dates or also appeared active.');
+      TXT(sub, d.sold_validation_summary.excluded_count + ' sold candidates were excluded from pricing because they did not match your current market segment or validation rules.');
     }
   }
   var aH = EL('h3', '', res);
@@ -997,7 +1055,7 @@ function buildVerification(res, d) {
   var vc = EL('div', 'cd', res);
   EL('h3', '', vc).textContent = '🔍 Verify Prices';
   var sub = EL('div', 'sb', vc);
-  sub.textContent = 'Always verify before buying. eBay prices change fast.';
+  sub.textContent = 'Always verify before buying. eBay prices change fast.' + (d.market_segment && d.market_segment !== 'auto' ? ' Current segment: ' + segLabel(d.market_segment) + '.' : '');
   var q = encodeURIComponent(d.query);
   var links = [
     {name:'eBay Sold', url:'https://www.ebay.com/sch/i.html?_nkw=' + q + '&LH_Sold=1&LH_Complete=1', icon:'🔗'},
