@@ -1304,6 +1304,8 @@ def _category_specific_mismatch_reasons(query: str, title: str, market_segment: 
             reasons.append('locked_phone')
         if seg != 'phone_allow_damaged' and not _query_allows_damage(query) and any(term in tl for term in ['bad lcd', 'sold as is', 'as is', 'as-is', 'cracked', 'broken', 'for parts', 'bad esn', 'icloud', 'read']):
             reasons.append('damaged_phone_listing')
+        if seg in ['auto', 'strict', 'phone_exact_storage'] and _title_has_phone_storage_menu_noise(tl, q_storage):
+            reasons.append('ambiguous_multi_storage_listing')
 
     if is_console_query:
         accessory_terms = [
@@ -1515,7 +1517,7 @@ def _apply_market_segment_post_filter(items: list[dict], query: str, market_segm
                 continue
         if q_storage:
             storages = _extract_title_storage_values(tl)
-            ambiguous = _title_has_ambiguous_storage_menu(tl)
+            ambiguous = _title_has_ambiguous_storage_menu(tl) or _title_has_phone_storage_menu_noise(tl, q_storage)
             if seg == 'phone_any_storage' or seg == 'broad':
                 pass
             else:
