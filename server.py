@@ -2058,7 +2058,7 @@ def api_search():
     if base_cache_key in PRICE_CACHE:
         cached = copy.deepcopy(PRICE_CACHE[base_cache_key])
         age = (datetime.now(timezone.utc) - cached.get("_cached_at", datetime.now(timezone.utc))).total_seconds()
-        if age < 300:
+        if age < 43200: # 12-hour server-side backup cache (up from 5 minutes)
             cached["active_filter_condition"] = filter_condition
             cached["buy_price"] = buy_price if buy_price > 0 else 0
             cached["store_tier"] = store_tier

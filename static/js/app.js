@@ -344,11 +344,6 @@ function clearAll() {
 async function search(filterCond) {
   var q = D('q').value.trim();
   if (!q) return;
-  ld(true); ce(); D('res').classList.remove('on');
-  
-  // Show skeleton loader
-  D('res').innerHTML = '<div class="cd"><div class="skeleton" style="height:40px;width:60%"></div><div class="gd"><div class="skeleton" style="height:80px"></div><div class="skeleton" style="height:80px"></div><div class="skeleton" style="height:80px"></div></div></div>';
-  D('res').classList.add('on');
 
   var c = filterCond || D('cond').value || 'all';
   var bp = parseFloat(D('bp').value) || 0;
@@ -357,6 +352,35 @@ async function search(filterCond) {
   var pr = parseFloat(D('promo').value) || 0;
   var catId = D('catId').value || '';
   var seg = D('marketSeg') ? (D('marketSeg').value || 'auto') : 'auto';
+
+  // Check Local Storage Browser Cache first (14 Days Expiry)
+  var cacheKey = 'pricespy_cache_' + q.toLowerCase() + '_' + period + '_' + c + '_' + seg;
+  try {
+    var cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      var parsed = JSON.parse(cached);
+      var age = Date.now() - parsed.timestamp;
+      var fourteenDays = 14 * 24 * 60 * 60 * 1000; // 14 days in milliseconds
+      if (age < fourteenDays) {
+        console.log("⚡ Browser Cache HIT! Loaded instantly and saved Apify credits.");
+        data = parsed.data;
+        setConds(data.available_conditions, data.condition_labels);
+        renderAll(data);
+        D('res').classList.add('on');
+        D('res').scrollIntoView({behavior:'smooth', block:'start'});
+        return; // Skip server request entirely
+      }
+    }
+  } catch (e) {
+    console.warn("Browser cache read error:", e);
+  }
+
+  ld(true); ce(); D('res').classList.remove('on');
+  
+  // Show skeleton loader
+  D('res').innerHTML = '<div class="cd"><div class="skeleton" style="height:40px;width:60%"></div><div class="gd"><div class="skeleton" style="height:80px"></div><div class="skeleton" style="height:80px"></div><div class="skeleton" style="height:80px"></div></div></div>';
+  D('res').classList.add('on');
+
   var u = '/api/search?q=' + encodeURIComponent(q) + '&period=' + period + '&condition=' + encodeURIComponent(c);
   if (bp > 0) u += '&buy_price=' + bp.toFixed(2);
   u += '&store_tier=' + st;
@@ -372,6 +396,17 @@ async function search(filterCond) {
     if (!data.sold_summary || !data.sold_summary.count) {
       // No sold results is OK — still show active and market note
     }
+
+    // Save to Browser Cache on successful fetch
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({
+        timestamp: Date.now(),
+        data: data
+      }));
+    } catch (e) {
+      console.warn("Browser cache write error:", e);
+    }
+
     setConds(data.available_conditions, data.condition_labels);
     renderAll(data);
     D('res').classList.add('on');
